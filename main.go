@@ -1,6 +1,12 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import (
+  "embed"
+  "html/template"
+  "net/http"
+
+  "github.com/gin-gonic/gin"
+)
 
 func main()  {
 	  router := gin.Default()
