@@ -1,19 +1,26 @@
 package main
 
 import (
-  "embed"
-  "html/template"
-  "net/http"
+	"embed"
+	"io/fs"
+	"net/http"
 
-  "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 )
 
-func main()  {
-	  router := gin.Default()
-  router.GET("/ping", func(c *gin.Context) {
-    c.JSON(200, gin.H{
-      "message": "pong",
-    })
-  })
-  router.Run()
+//go:embed template/dist
+var frontendFS embed.FS
+
+func main() {
+	r := gin.Default()
+
+	distFS, err := fs.Sub(frontendFS, "template/dist")
+	if err != nil {
+		panic(err)
+	}
+
+	// 挂载到 /
+	r.StaticFS("/", http.FS(distFS))
+
+	r.Run()
 }
