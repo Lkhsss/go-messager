@@ -18,16 +18,25 @@ type ErrorInfo struct {
 }
 
 type Meta struct {
-	Page       int `json:"page,omitempty"`
-	PerPage    int `json:"per_page,omitempty"`
-	Total      int `json:"total,omitempty"`
-	TotalPages int `json:"total_pages,omitempty"`
+	Page       int `json:"page"`
+	PerPage    int `json:"per_page"`
+	Total      int `json:"total"`
+	TotalPages int `json:"total_pages"`
 }
 
 func (r Response) Ok(c *gin.Context, status int, data any) {
 	c.JSON(status, Response{
 		Success: true,
 		Data:    data,
+	})
+}
+
+// OkWithMeta 返回带分页元信息（页码/每页数量/总数/总页数）的成功响应
+func (r Response) OkWithMeta(c *gin.Context, status int, data any, meta *Meta) {
+	c.JSON(status, Response{
+		Success: true,
+		Data:    data,
+		Meta:    meta,
 	})
 }
 

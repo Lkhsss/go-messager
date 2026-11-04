@@ -18,34 +18,40 @@ import (
 var frontendFS embed.FS
 
 func main() {
+	StartTimer() // 启动计时器，记录进程启动时刻
+
+	// gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-	r.Use(ErrorHandler()) //加入错误处理中间件
+	//r.Use(ErrorHandler()) //加入错误处理中间件
 
 	db, err := gorm.Open(sqlite.Open("data.db"), &gorm.Config{})
 	if err != nil {
 		panic(err) // 或 log.Fatal(err)
 	}
 
-	// ctx := context.Background()
-
-	// 自动建表
+	// 数据库自动建表
 	db.AutoMigrate(&User{}, &Post{}, &Setting{})
-
-	distFS, err := fs.Sub(frontendFS, "template/dist")
-	if err != nil {
-		panic(err)
-	}
 
 	// 挂载api
 	api(r, db)
 
-	// 前端静态资源 + SPA 兜底
-	// 注意：不能用 r.StaticFS("/", ...)，它注册的 /*filepath 是 catchAll 节点，
-	// 注册后无法再加 /api/xxx 这样的精确路由，
-	// 否则 panic: '/api/ping' conflicts with existing wildcard '/*filepath'。
-	// 所以统一放到 NoRoute 处理：先找静态文件，找不到再回退 index.html。
-	r.NoRoute(spaHandler(distFS))
+	if gin.Mode() == gin.ReleaseMode {
 
+		// 前端文件嵌入
+		distFS, err := fs.Sub(frontendFS, "template/dist")
+		if err != nil {
+			panic(err)
+		}
+
+		// 前端静态资源 + SPA 兜底
+		// 注意：不能用 r.StaticFS("/", ...)，它注册的 /*filepath 是 catchAll 节点，
+		// 注册后无法再加 /api/xxx 这样的精确路由，
+		// 否则 panic: '/api/ping' conflicts with existing wildcard '/*filepath'。
+		// 所以统一放到 NoRoute 处理：先找静态文件，找不到再回退 index.html。
+		r.NoRoute(spaHandler(distFS))
+	}
+
+	// 监听地址配置。本地测试默认本地回环，减少防火墙提示
 	addr := "0.0.0.0:8080"
 	if gin.Mode() == gin.DebugMode {
 		addr = "127.0.0.1:8080"
