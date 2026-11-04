@@ -1,85 +1,61 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
+import SidebartoggleOpen from './components/icons/SidebarToggleOpen.vue';
+import SidebarToggleClose from './components/icons/SidebarToggleClose.vue';
+import HomeIcon from './components/icons/HomeIcon.vue';
+import SettingIcon from './components/icons/SettingIcon.vue';
+
+const sidebarOpen = ref(false)
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+}
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
+  <div class="drawer lg:drawer-open">
+    <input id="my-drawer-4" v-model="sidebarOpen" type="checkbox" class="drawer-toggle inline" />
+    <div class="drawer-content">
+      <!-- Navbar -->
+      <nav class="navbar w-full bg-base-300">
+        <button type="button" :aria-label="sidebarOpen ? 'close sidebar' : 'open sidebar'" aria-controls="my-drawer-4"
+          :aria-expanded="sidebarOpen" class="btn btn-square btn-ghost drawer-button" @click="toggleSidebar">
+          <SidebartoggleOpen v-if="!sidebarOpen" />
+          <SidebarToggleClose v-else />
+        </button>
+        <div class="navbar-center">
+          <a class="btn btn-ghost text-xl">Go Messager</a>
+        </div>
       </nav>
+      <!-- Page content here -->
+      <RouterView />
     </div>
-  </header>
 
-  <RouterView />
+    <div class="drawer-side is-drawer-close:overflow-visible">
+      <label for="my-drawer-4" aria-label="close sidebar" class="drawer-overlay"></label>
+      <div class="flex min-h-full flex-col items-start bg-base-200 is-drawer-close:w-14 is-drawer-open:w-64">
+        <!-- Sidebar content here -->
+        <ul class="menu w-full grow">
+          <!-- List item -->
+          <li>
+
+            <router-link to="/" class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Homepage">
+              <!-- Home icon -->
+              <HomeIcon />
+              <span class="is-drawer-close:hidden">Homepage</span>
+            </router-link>
+          </li>
+
+          <!-- List item -->
+          <li>
+            <router-link to="/setting" class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Settings">
+              <!-- Settings icon -->
+              <SettingIcon />
+              <span class="is-drawer-close:hidden">Settings</span>
+            </router-link>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </template>
-
-<style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
-}
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
-}
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
-}
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
-}
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
-}
-</style>
