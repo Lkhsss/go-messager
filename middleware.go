@@ -6,19 +6,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ErrorHandler captures errors and returns a consistent JSON error response
+// ErrorHandler 捕获 handler 通过 c.Error 追加的错误，并返回统一格式的错误响应。
+// 注意：handler 自己已经写过响应（c.Writer.Written()）时不再重复写。
 func ErrorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Next() // Process the request first
+		c.Next() // 先执行后续 handler
 
-		// Check if any errors were added to the context
-		if len(c.Errors) > 0 {
+		if len(c.Errors) > 0 && !c.Writer.Written() {
 			err := c.Errors.Last().Err
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			Response{}.Fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		}
 	}
 }

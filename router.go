@@ -15,6 +15,8 @@ func api(r *gin.Engine, db *gorm.DB) {
 			"message": "pong",
 		})
 	})
-
+	g.POST("/authorize", data.Authorize)
+	g.POST("/register", data.Register)
 	g.POST("/post/new", data.NewPost)
+	g.GET("/post", data.ListPost)
 }

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,16 +24,14 @@ type Meta struct {
 	TotalPages int `json:"total_pages,omitempty"`
 }
 
-// OK sends a success response.
-func OK(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, Response{
+func (r Response) Ok(c *gin.Context, status int, data any) {
+	c.JSON(status, Response{
 		Success: true,
 		Data:    data,
 	})
 }
 
-// Fail sends an error response.
-func Fail(c *gin.Context, status int, code, message string) {
+func (r Response) Fail(c *gin.Context, status int, code, message string) {
 	c.JSON(status, Response{
 		Success: false,
 		Error:   &ErrorInfo{Code: code, Message: message},

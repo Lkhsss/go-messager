@@ -14,10 +14,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// import (
-//   "go-messager/model"
-// )
-
 //go:embed template/dist
 var frontendFS embed.FS
 
@@ -50,7 +46,13 @@ func main() {
 	// 所以统一放到 NoRoute 处理：先找静态文件，找不到再回退 index.html。
 	r.NoRoute(spaHandler(distFS))
 
-	r.Run()
+	addr := "0.0.0.0:8080"
+	if gin.Mode() == gin.DebugMode {
+		addr = "127.0.0.1:8080"
+	}
+
+	r.Run(addr)
+
 }
 
 // spaHandler 兜底处理所有未匹配的路由：
