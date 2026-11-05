@@ -32,3 +32,15 @@ func (d *Data) Uptime(c *gin.Context) {
 		"uptime_seconds": UptimeSeconds(),
 	})
 }
+
+// Status 系统状态 GET /api/status
+// 前端用它判断是否需要进入「初始化系统」流程（创建第一个用户）。
+func (d *Data) Status(c *gin.Context) {
+	var count int64
+	if err := d.DB.Model(&User{}).Count(&count).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "COUNT_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, gin.H{"initialized": count > 0})
+}

@@ -44,7 +44,8 @@ async function logout() {
 
         </div>
         <div class="flex-none">
-          <span v-if="auth.user" class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user }}</span>
+          <span v-if="auth.isAdmin" class="badge badge-primary badge-sm mr-2">管理员</span>
+          <span v-if="auth.user" class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user.name }}</span>
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>
         </div>
       </nav>
@@ -64,6 +65,19 @@ async function logout() {
               <!-- Home icon -->
               <HomeIcon />
               <span class="is-drawer-close:hidden">Homepage</span>
+            </router-link>
+          </li>
+
+          <!-- List item -->
+          <li>
+            <router-link to="/post/new" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip="写文章">
+              <svg aria-label="写文章" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M11 5h6a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2v-6m12-8L8 15l-4 1 1-4 8-8z" />
+              </svg>
+              <span class="is-drawer-close:hidden">写文章</span>
             </router-link>
           </li>
 

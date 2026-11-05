@@ -4,11 +4,19 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
+
+// AuthResult 登录/注册成功后返回的令牌与用户信息
+type AuthResult struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+	User      UserView  `json:"user"`
+}
 
 // Authorize 登录 POST /api/authorize
 func (d *Data) Authorize(c *gin.Context) {
@@ -24,7 +32,7 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
-	passwordHash, err := d.GetPassword(req.Name)
+	user, err := d.GetUserByName(req.Name)
 	if err != nil {
 		// 用户不存在也返回 401，避免账号枚举
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -35,16 +43,33 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
+	// 先校验密码，再判断账号是否停用：否则可以用 403 探测某个用户名是否存在
 	// CompareHashAndPassword(hashedPassword, plainPassword)
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
 
-	Response{}.Ok(c, http.StatusOK, gin.H{"name": req.Name})
+	if user.Role == RoleNone {
+		Response{}.Fail(c, http.StatusForbidden, "ACCOUNT_DISABLED", "账号已被停用")
+		return
+	}
+
+	token, expiresAt, err := d.issueToken(user)
+	if err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "TOKEN_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, AuthResult{
+		Token:     token,
+		ExpiresAt: expiresAt,
+		User:      user.View(),
+	})
 }
 
 // Register 注册 POST /api/register
+// 库里还没有用户时，第一个注册的人是 admin；之后都是 user。
 func (d *Data) Register(c *gin.Context) {
 	var req Credentials
 	if err := c.ShouldBind(&req); err != nil {
@@ -74,10 +99,35 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	if err := d.CreateUser(req.Name, string(hashedPassword)); err != nil {
+	user, err := d.CreateUser(req.Name, string(hashedPassword))
+	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
 	}
 
-	Response{}.Ok(c, http.StatusCreated, gin.H{"name": req.Name})
+	// 注册后直接登录，省掉一次登录请求
+	token, expiresAt, err := d.issueToken(user)
+	if err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "TOKEN_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusCreated, AuthResult{
+		Token:     token,
+		ExpiresAt: expiresAt,
+		User:      user.View(),
+	})
 }
+
+// Me 获取当前登录用户 GET /api/me
+// 前端启动时用它校验本地 token 是否有效，并刷新角色（角色以服务端为准）。
+func (d *Data) Me(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, user.View())
+}
+

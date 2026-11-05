@@ -7,8 +7,6 @@ import (
 	"path"
 	"strings"
 
-	// "context"
-
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -21,8 +19,8 @@ func main() {
 	StartTimer() // 启动计时器，记录进程启动时刻
 
 	// gin.SetMode(gin.ReleaseMode)
+
 	r := gin.Default()
-	//r.Use(ErrorHandler()) //加入错误处理中间件
 
 	db, err := gorm.Open(sqlite.Open("data.db"), &gorm.Config{})
 	if err != nil {
@@ -30,10 +28,19 @@ func main() {
 	}
 
 	// 数据库自动建表
-	db.AutoMigrate(&User{}, &Post{}, &Setting{})
+	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Setting{}); err != nil {
+		panic(err)
+	}
+
+	// 启动时校准标签使用次数（幂等）
+	if err := syncTagUsageCounts(db); err != nil {
+		panic(err)
+	}
 
 	// 挂载api
-	api(r, db)
+	if err := api(r, db); err != nil {
+		panic(err)
+	}
 
 	if gin.Mode() == gin.ReleaseMode {
 
