@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { TagItem } from '@/api/tag'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import UserAvatar from '@/components/UserAvatar.vue'
 
 defineProps<{
   user: string
   title: string
   subtitle: string
   body: string
+  userGravatar?: string
   tags?: TagItem[]
 }>()
 </script>
@@ -15,11 +17,7 @@ defineProps<{
   <article class="card bg-base-100 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <div class="card-body gap-3">
       <header class="flex items-center gap-3">
-        <div class="avatar avatar-placeholder">
-          <div class="w-10 rounded-full bg-primary text-primary-content">
-            <span class="text-lg font-semibold">{{ user.slice(0, 1).toUpperCase() }}</span>
-          </div>
-        </div>
+        <UserAvatar :name="user" :hash="userGravatar" :size="40" />
         <div class="min-w-0">
           <p class="truncate font-medium">{{ user }}</p>
         </div>

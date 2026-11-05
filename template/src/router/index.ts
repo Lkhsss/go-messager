@@ -4,6 +4,7 @@ import SettingView from "@/views/SettingView.vue";
 import LoginView from "@/views/LoginView.vue";
 import SetupView from "@/views/SetupView.vue";
 import PostCreateView from "@/views/PostCreateView.vue";
+import AdminView from "@/views/AdminView.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useSystemStore } from "@/stores/system";
 
@@ -18,6 +19,8 @@ declare module "vue-router" {
     guestOnly?: boolean;
     // 只在系统未初始化（还没有第一个用户）时可访问
     setupOnly?: boolean;
+    // 仅管理员可访问
+    requiresAdmin?: boolean;
   }
 }
 
@@ -47,6 +50,12 @@ const router = createRouter({
       name: "post-new",
       component: PostCreateView,
       meta: { requiresAuth: true },
+    },
+    {
+      path: "/admin",
+      name: "admin",
+      component: AdminView,
+      meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: "/setting",
@@ -91,6 +100,11 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+
+  // 非管理员不能进管理页（未登录的情况上面已重定向到登录页）
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    return { name: "home" };
   }
 
   return true;

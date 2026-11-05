@@ -4,6 +4,10 @@ export type Role = "admin" | "user" | "none";
 export interface AuthUser {
   name: string;
   role: Role;
+  // 仅自己可见，用于生成 Gravatar 头像
+  email?: string;
+  // md5(email)，前端用它拼 gravatar.com 地址
+  gravatar_hash?: string;
 }
 
 export interface StoredAuth {
@@ -43,12 +47,17 @@ export function readAuth(): StoredAuth | null {
     }
 
     const roleCandidate = storedUser?.role;
+    const email = typeof storedUser?.email === "string" ? storedUser.email : undefined;
+    const gravatarHash = typeof storedUser?.gravatar_hash === "string" ? storedUser.gravatar_hash : undefined;
+
     return {
       token: parsed.token,
       expiresAt,
       user: {
         name,
         role: isRole(roleCandidate) ? roleCandidate : "user",
+        ...(email ? { email } : {}),
+        ...(gravatarHash ? { gravatar_hash: gravatarHash } : {}),
       },
     };
   } catch {

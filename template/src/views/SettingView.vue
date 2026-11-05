@@ -1,122 +1,103 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { createTag, fetchTags, type TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
-import { tagBadgeStyle } from '@/utils/tagColor'
+import UserAvatar from '@/components/UserAvatar.vue'
 
 const auth = useAuthStore()
 
-const tags = ref<TagItem[]>([])
-const name = ref('')
-const loading = ref(false)
+const email = ref(auth.user?.email ?? '')
+const saving = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 
-// 颜色可选：不勾选「自定义颜色」就用默认高级灰
-const useCustomColor = ref(false)
-const color = ref('#3b82f6')
-const hexColorPattern = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+// 登录态从别处刷新时同步输入框
+watch(
+  () => auth.user?.email,
+  (next) => {
+    email.value = next ?? ''
+  },
+)
 
-function resetColor() {
-  useCustomColor.value = false
-  color.value = '#3b82f6'
-}
+async function saveEmail() {
+  if (saving.value) return
 
-async function loadTags() {
-  try {
-    tags.value = await fetchTags()
-  } catch {
-    // 列表加载失败不阻塞创建
-  }
-}
-
-async function onSubmit() {
-  if (loading.value) return
-
-  const trimmed = name.value.trim()
-  if (!trimmed) {
-    errorMsg.value = '请输入标签名'
-    return
-  }
-
-  const trimmedColor = useCustomColor.value ? color.value.trim() : ''
-  if (trimmedColor && !hexColorPattern.test(trimmedColor)) {
-    errorMsg.value = '颜色需为 #RGB 或 #RRGGBB 格式的十六进制'
-    return
-  }
-
-  loading.value = true
+  saving.value = true
   errorMsg.value = ''
   successMsg.value = ''
   try {
-    const tag = await createTag(trimmed, trimmedColor)
-    tags.value = [...tags.value, tag].sort((a, b) => a.name.localeCompare(b.name))
-    name.value = ''
-    successMsg.value = `标签「${tag.name}」已创建`
+    await auth.updateProfile(email.value.trim())
+    successMsg.value = email.value.trim()
+      ? '邮箱已保存，头像已更新'
+      : '已清除邮箱，将显示用户名首字母头像'
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '创建失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : '保存失败，请稍后再试'
   } finally {
-    loading.value = false
+    saving.value = false
   }
 }
 
-onMounted(() => {
-  void loadTags()
-})
+async function clearEmail() {
+  email.value = ''
+  await saveEmail()
+}
 </script>
 
 <template>
   <main class="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
     <h1 class="text-2xl font-semibold lg:text-3xl">设置</h1>
 
-    <div v-if="!auth.isAdmin" role="alert" class="alert alert-info alert-soft mt-6">
-      <span>只有管理员可以创建标签。你可以选择已有标签来发帖。</span>
-    </div>
-
-    <section v-else class="card mt-6 bg-base-100 shadow-sm">
+    <section class="card mt-6 bg-base-100 shadow-sm">
       <div class="card-body gap-4">
-        <div>
-          <h2 class="card-title text-lg">标签管理</h2>
-          <p class="mt-1 text-sm text-base-content/60">标签只有管理员能创建，发帖时每人最多选择 5 个。</p>
+        <h2 class="card-title text-lg">账号</h2>
+
+        <div class="space-y-2 text-sm">
+          <p>
+            用户名：<span class="font-medium">{{ auth.user?.name ?? '-' }}</span>
+          </p>
+          <p class="flex items-center gap-2">
+            角色：
+            <span class="badge badge-sm" :class="auth.isAdmin ? 'badge-primary' : 'badge-ghost'">
+              {{ auth.isAdmin ? '管理员' : '普通用户' }}
+            </span>
+          </p>
         </div>
 
-        <form class="space-y-3" novalidate @submit.prevent="onSubmit">
-          <div class="flex flex-col gap-2 sm:flex-row">
-            <label class="floating-label flex-1">
-              <span>标签名</span>
-              <input v-model="name" type="text" name="tag" placeholder="例如：Go" maxlength="30"
-                class="input input-bordered w-full" :disabled="loading" />
-            </label>
-            <button type="submit" class="btn btn-primary sm:self-end" :disabled="loading">
-              <span v-if="loading" class="loading loading-spinner loading-sm"></span>
-              创建标签
-            </button>
-          </div>
+        <p v-if="auth.isAdmin" class="text-sm text-base-content/60">
+          标签管理已移到侧边栏的「管理」页面。
+        </p>
+      </div>
+    </section>
 
-          <!-- 颜色可选：不勾选则使用默认高级灰 -->
-          <div class="flex flex-wrap items-center gap-3 text-sm">
-            <label class="flex cursor-pointer items-center gap-2">
-              <input v-model="useCustomColor" type="checkbox" class="toggle toggle-sm" />
-              自定义颜色
-            </label>
+    <section class="card mt-6 bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">头像（Gravatar）</h2>
 
-            <template v-if="useCustomColor">
-              <input v-model="color" type="color" class="h-9 w-14 cursor-pointer rounded border border-base-300 bg-base-100 p-1"
-                aria-label="选择标签颜色" />
-              <input v-model="color" type="text" class="input input-bordered input-sm w-28" placeholder="#6b7280"
-                maxlength="7" aria-label="十六进制颜色" />
-              <button type="button" class="btn btn-ghost btn-xs" @click="resetColor">使用默认灰</button>
-            </template>
+        <div class="flex items-center gap-4">
+          <UserAvatar :name="auth.user?.name ?? '?'" :hash="auth.user?.gravatar_hash" :size="72" />
+          <p class="text-sm text-base-content/60">
+            头像直接来自 Gravatar，网站不保存图片。填写邮箱后自动获取；留空则显示用户名首字母。
+          </p>
+        </div>
 
-            <span class="inline-flex items-center gap-1 text-xs text-base-content/60">
-              预览：
-              <span class="badge" :style="tagBadgeStyle({ color: useCustomColor ? color : '' })">
-                #{{ name.trim() || '标签' }}
-              </span>
-            </span>
-          </div>
+        <form class="flex flex-col gap-2 sm:flex-row" novalidate @submit.prevent="saveEmail">
+          <label class="floating-label flex-1">
+            <span>Gravatar 邮箱</span>
+            <input v-model="email" type="email" name="email" placeholder="you@example.com" autocomplete="email"
+              class="input input-bordered w-full" :disabled="saving" />
+          </label>
+          <button type="submit" class="btn btn-primary sm:self-end" :disabled="saving">
+            <span v-if="saving" class="loading loading-spinner loading-sm"></span>
+            保存
+          </button>
+          <button type="button" class="btn btn-ghost sm:self-end" :disabled="saving" @click="clearEmail">
+            清除
+          </button>
         </form>
+
+        <p class="text-xs text-base-content/50">
+          邮箱仅用于生成头像，不会公开展示；文章列表只使用邮箱的 MD5 哈希向 gravatar.com 请求图片。
+        </p>
 
         <div v-if="errorMsg" role="alert" class="alert alert-error alert-soft py-2 text-sm">
           <span>{{ errorMsg }}</span>
@@ -124,19 +105,8 @@ onMounted(() => {
         <div v-if="successMsg" role="status" class="alert alert-success alert-soft py-2 text-sm">
           <span>{{ successMsg }}</span>
         </div>
-
-        <div>
-          <h3 class="mb-2 text-sm font-medium">已有标签（{{ tags.length }}）</h3>
-          <div v-if="tags.length === 0" class="text-sm text-base-content/60">还没有标签</div>
-          <div v-else class="flex flex-wrap gap-2">
-            <span v-for="tag in tags" :key="tag.ID" class="badge" :style="tagBadgeStyle(tag)"
-              :title="`被 ${tag.usage_count} 篇文章使用`">
-              #{{ tag.name }}
-              <span class="ml-1 opacity-60">{{ tag.usage_count }}</span>
-            </span>
-          </div>
-        </div>
       </div>
     </section>
   </main>
 </template>
+

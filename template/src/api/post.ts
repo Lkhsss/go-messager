@@ -12,6 +12,8 @@ export interface PostItem {
   title: string;
   subtitle: string;
   body: string;
+  // 作者头像哈希（md5(email)），由后端按作者邮箱计算
+  user_gravatar?: string;
   tags?: TagItem[];
 }
 

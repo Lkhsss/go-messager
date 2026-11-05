@@ -140,7 +140,7 @@ function goTo(next: number) {
     <template v-else>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2" :class="{ 'opacity-60': loading }">
         <Post v-for="post in posts" :key="post.ID" :user="post.user" :title="post.title" :subtitle="post.subtitle"
-          :body="post.body" :tags="post.tags" />
+          :body="post.body" :user-gravatar="post.user_gravatar" :tags="post.tags" />
       </div>
 
       <div v-if="meta" class="mt-6 flex justify-center">

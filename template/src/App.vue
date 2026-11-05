@@ -5,6 +5,7 @@ import SidebartoggleOpen from './components/icons/SidebarToggleOpen.vue';
 import SidebarToggleClose from './components/icons/SidebarToggleClose.vue';
 import HomeIcon from './components/icons/HomeIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
+import UserAvatar from './components/UserAvatar.vue';
 import { useAuthStore } from './stores/auth';
 
 const sidebarOpen = ref(false)
@@ -43,8 +44,9 @@ async function logout() {
           </div>
 
         </div>
-        <div class="flex-none">
-          <span v-if="auth.isAdmin" class="badge badge-primary badge-sm mr-2">管理员</span>
+        <div class="flex-none flex items-center gap-2">
+          <UserAvatar v-if="auth.user" :name="auth.user.name" :hash="auth.user.gravatar_hash" :size="32" />
+          <span v-if="auth.isAdmin" class="badge badge-primary badge-sm">管理员</span>
           <span v-if="auth.user" class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user.name }}</span>
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>
         </div>
@@ -78,6 +80,20 @@ async function logout() {
                   d="M11 5h6a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2v-6m12-8L8 15l-4 1 1-4 8-8z" />
               </svg>
               <span class="is-drawer-close:hidden">写文章</span>
+            </router-link>
+          </li>
+
+          <!-- 仅管理员可见：管理 -->
+          <li v-if="auth.isAdmin">
+            <router-link to="/admin" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip="管理">
+              <svg aria-label="管理" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4" />
+              </svg>
+              <span class="is-drawer-close:hidden">管理</span>
             </router-link>
           </li>
 

@@ -23,6 +23,7 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	authed := g.Group("")
 	authed.Use(data.AuthRequired())
 	authed.GET("/me", data.Me)
+	authed.PATCH("/me", data.UpdateMe)
 	authed.GET("/post", data.GetPost)
 	authed.GET("/post/:id", data.GetPostByID)
 	authed.POST("/post/new", data.NewPost)

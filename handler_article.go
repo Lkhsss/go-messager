@@ -73,6 +73,8 @@ func (d *Data) NewPost(c *gin.Context) {
 		return
 	}
 
+	post.UserGravatar = gravatarHash(user.Email)
+
 	Response{}.Ok(c, http.StatusCreated, post)
 }
 
@@ -114,6 +116,10 @@ func (d *Data) GetPostByID(c *gin.Context) {
 		post.Tags = []Tag{}
 	}
 
+	posts := []Post{post}
+	d.fillPostGravatars(posts)
+	post = posts[0]
+
 	Response{}.Ok(c, http.StatusOK, post)
 }
 
@@ -149,6 +155,7 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	}
 
 	ensurePostTags(posts)
+	d.fillPostGravatars(posts)
 
 	totalPages := 0
 	if total > 0 {

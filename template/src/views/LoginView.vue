@@ -18,6 +18,7 @@ const form = reactive({
   name: '',
   password: '',
   confirm: '',
+  email: '',
 })
 
 const isRegister = computed(() => mode.value === 'register')
@@ -39,6 +40,8 @@ function validate(): string {
   if (isRegister.value) {
     if (form.password.length < 6) return '密码至少 6 位'
     if (form.password !== form.confirm) return '两次输入的密码不一致'
+    const email = form.email.trim()
+    if (email && !email.includes('@')) return '邮箱格式不正确'
   }
   return ''
 }
@@ -52,7 +55,8 @@ async function onSubmit() {
   try {
     const credentials = { name: form.name.trim(), password: form.password }
     if (isRegister.value) {
-      await auth.signup(credentials)
+      const email = form.email.trim()
+      await auth.signup({ ...credentials, ...(email ? { email } : {}) })
     } else {
       await auth.login(credentials)
     }
@@ -99,6 +103,12 @@ async function onSubmit() {
             <input v-model="form.password" type="password" name="password" placeholder="请输入密码"
               :autocomplete="isRegister ? 'new-password' : 'current-password'" class="input input-bordered w-full"
               :disabled="loading" />
+          </label>
+
+          <label v-if="isRegister" class="floating-label">
+            <span>邮箱（可选，用于 Gravatar 头像）</span>
+            <input v-model="form.email" type="email" name="email" placeholder="you@example.com" autocomplete="email"
+              class="input input-bordered w-full" :disabled="loading" />
           </label>
 
           <label v-if="isRegister" class="floating-label">

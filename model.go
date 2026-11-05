@@ -17,23 +17,44 @@ type User struct {
 	// Password 存 bcrypt hash；json:"-" 防止以后误把 User 直接序列化出去
 	Password string `form:"password" json:"-" binding:"required"`
 	Role     Role   `gorm:"type:text;not null;default:'user'" json:"role"`
+	// Email 只用于生成 Gravatar 头像，不对外公开（json:"-"）
+	Email string `gorm:"size:254" json:"-"`
 }
 
 // UserView 是对外暴露的用户信息，不含密码 hash
 type UserView struct {
-	Name string `json:"name"`
-	Role Role   `json:"role"`
+	Name         string `json:"name"`
+	Role         Role   `json:"role"`
+	Email        string `json:"email,omitempty"`         // 仅本人可见
+	GravatarHash string `json:"gravatar_hash,omitempty"` // md5(email)，前端据此拼 gravatar 地址
 }
 
 // View 转成可安全返回给客户端的结构
 func (u User) View() UserView {
-	return UserView{Name: u.Name, Role: u.Role}
+	return UserView{
+		Name:         u.Name,
+		Role:         u.Role,
+		Email:        u.Email,
+		GravatarHash: gravatarHash(u.Email),
+	}
 }
 
 // Credentials 是登录/注册的请求体，避免客户端直接绑定到 User（防止塞 ID、Role 等字段）
 type Credentials struct {
 	Name     string `form:"name" json:"name" binding:"required"`
 	Password string `form:"password" json:"password" binding:"required"`
+}
+
+// RegisterInput 注册请求体：邮箱可选，仅用于 Gravatar
+type RegisterInput struct {
+	Name     string `json:"name" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Email    string `json:"email"`
+}
+
+// UpdateMeInput 修改当前用户资料（目前只有 Gravatar 邮箱）
+type UpdateMeInput struct {
+	Email string `json:"email"`
 }
 
 type Post struct {
@@ -44,6 +65,8 @@ type Post struct {
 	Body     string `json:"body" binding:"required"`
 	// Tags 与 Tag 是多对多关系，可通过 post.Tags 查标签，也可通过 tag.Posts 反查文章
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
+	// UserGravatar 是查询时按作者邮箱算出的 MD5，不落库；只暴露哈希，不暴露邮箱
+	UserGravatar string `gorm:"-" json:"user_gravatar,omitempty"`
 }
 
 // Tag 文章标签。只能由管理员创建，普通用户发帖时最多选择 5 个。

@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { authorize, fetchMe, register, type Credentials } from "@/api/auth";
+import { authorize, fetchMe, register, updateMe, type Credentials, type RegisterInput } from "@/api/auth";
 import { clearAuth, readAuth, writeAuth, type AuthUser, type StoredAuth } from "@/api/authStorage";
 import { isApiError } from "@/api/http";
 
@@ -45,10 +45,19 @@ export const useAuthStore = defineStore("auth", () => {
     return result;
   }
 
-  async function signup(credentials: Credentials) {
+  async function signup(credentials: RegisterInput) {
     const result = await register(credentials);
     setAuth({ token: result.token, expiresAt: result.expires_at, user: result.user });
     return result;
+  }
+
+  // 修改 Gravatar 邮箱：token 不变，只刷新用户资料
+  async function updateProfile(email: string) {
+    const nextUser = await updateMe(email);
+    if (token.value) {
+      setAuth({ token: token.value, expiresAt: expiresAt.value, user: nextUser });
+    }
+    return nextUser;
   }
 
   function logout() {
@@ -107,6 +116,7 @@ export const useAuthStore = defineStore("auth", () => {
     isAdmin,
     login,
     signup,
+    updateProfile,
     logout,
     sync,
     ensureSession,

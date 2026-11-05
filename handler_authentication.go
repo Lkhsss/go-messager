@@ -71,7 +71,7 @@ func (d *Data) Authorize(c *gin.Context) {
 // Register 注册 POST /api/register
 // 库里还没有用户时，第一个注册的人是 admin；之后都是 user。
 func (d *Data) Register(c *gin.Context) {
-	var req Credentials
+	var req RegisterInput
 	if err := c.ShouldBind(&req); err != nil {
 		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
 		return
@@ -80,6 +80,12 @@ func (d *Data) Register(c *gin.Context) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.Password == "" {
 		Response{}.Fail(c, http.StatusBadRequest, "NEED_CREDENTIALS", "用户名和密码不能为空")
+		return
+	}
+
+	email, err := normalizeEmail(req.Email)
+	if err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_EMAIL", err.Error())
 		return
 	}
 
@@ -99,7 +105,7 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := d.CreateUser(req.Name, string(hashedPassword))
+	user, err := d.CreateUser(req.Name, string(hashedPassword), email)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
@@ -128,6 +134,35 @@ func (d *Data) Me(c *gin.Context) {
 		return
 	}
 
+	Response{}.Ok(c, http.StatusOK, user.View())
+}
+
+// UpdateMe 修改当前用户资料 PATCH /api/me（目前只有 Gravatar 邮箱）
+func (d *Data) UpdateMe(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	var req UpdateMeInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
+
+	email, err := normalizeEmail(req.Email)
+	if err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_EMAIL", err.Error())
+		return
+	}
+
+	if err := d.UpdateUserEmail(user.ID, email); err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	user.Email = email
 	Response{}.Ok(c, http.StatusOK, user.View())
 }
 

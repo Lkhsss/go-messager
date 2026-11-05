@@ -16,12 +16,15 @@ const form = reactive({
   name: '',
   password: '',
   confirm: '',
+  email: '',
 })
 
 function validate(): string {
   if (!form.name.trim()) return '请输入管理员用户名'
   if (form.password.length < 6) return '密码至少 6 位'
   if (form.password !== form.confirm) return '两次输入的密码不一致'
+  const email = form.email.trim()
+  if (email && !email.includes('@')) return '邮箱格式不正确'
   return ''
 }
 
@@ -32,7 +35,8 @@ async function onSubmit() {
 
   loading.value = true
   try {
-    await auth.signup({ name: form.name.trim(), password: form.password })
+    const email = form.email.trim()
+    await auth.signup({ name: form.name.trim(), password: form.password, ...(email ? { email } : {}) })
     system.markInitialized()
     await router.replace('/')
   } catch (err) {
@@ -73,6 +77,12 @@ async function onSubmit() {
             <span>密码</span>
             <input v-model="form.password" type="password" name="password" placeholder="请输入密码"
               autocomplete="new-password" class="input input-bordered w-full" :disabled="loading" />
+          </label>
+
+          <label class="floating-label">
+            <span>邮箱（可选，用于 Gravatar 头像）</span>
+            <input v-model="form.email" type="email" name="email" placeholder="you@example.com" autocomplete="email"
+              class="input input-bordered w-full" :disabled="loading" />
           </label>
 
           <label class="floating-label">
