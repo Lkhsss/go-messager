@@ -1,5 +1,6 @@
 import http, { type ApiResponse, type PaginationMeta } from "./http";
 import type { TagItem } from "./tag";
+import type { ReactionSummary, ReactionType } from "./reaction";
 
 // 与 Go 端 model.go 的 Post 对齐：
 // gorm.Model 没有 json tag，ID / 时间字段是首字母大写，业务字段来自 Post 的 tag（小写）。
@@ -15,6 +16,9 @@ export interface PostItem {
   // 作者头像哈希（md5(email)），由后端按作者邮箱计算
   user_gravatar?: string;
   tags?: TagItem[];
+  // 反应汇总 + 当前用户已做出的反应
+  reactions?: ReactionSummary;
+  my_reactions?: ReactionType[];
 }
 
 export interface PostQuery {

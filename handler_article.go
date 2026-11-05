@@ -74,6 +74,8 @@ func (d *Data) NewPost(c *gin.Context) {
 	}
 
 	post.UserGravatar = gravatarHash(user.Email)
+	post.Reactions = buildReactionSummary(0, 0, 0, "")
+	post.MyReactions = []ReactionType{}
 
 	Response{}.Ok(c, http.StatusCreated, post)
 }
@@ -116,9 +118,11 @@ func (d *Data) GetPostByID(c *gin.Context) {
 		post.Tags = []Tag{}
 	}
 
-	posts := []Post{post}
-	d.fillPostGravatars(posts)
-	post = posts[0]
+	result := []Post{post}
+	d.fillPostGravatars(result)
+	currentUser, _ := CurrentUser(c)
+	d.fillPostReactions(result, currentUser.ID)
+	post = result[0]
 
 	Response{}.Ok(c, http.StatusOK, post)
 }
@@ -156,6 +160,9 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 
 	ensurePostTags(posts)
 	d.fillPostGravatars(posts)
+
+	currentUser, _ := CurrentUser(c)
+	d.fillPostReactions(posts, currentUser.ID)
 
 	totalPages := 0
 	if total > 0 {

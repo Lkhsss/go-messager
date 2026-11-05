@@ -1,4 +1,6 @@
 // 登录态存储：独立模块，供 axios 拦截器和 Pinia store 共用，避免循环依赖。
+import type { ReactionSummary } from "./reaction";
+
 export type Role = "admin" | "user" | "none";
 
 export interface AuthUser {
@@ -8,6 +10,8 @@ export interface AuthUser {
   email?: string;
   // md5(email)，前端用它拼 gravatar.com 地址
   gravatar_hash?: string;
+  // 该用户文章收到的反应总和
+  reaction_totals?: ReactionSummary;
 }
 
 export interface StoredAuth {
@@ -49,6 +53,7 @@ export function readAuth(): StoredAuth | null {
     const roleCandidate = storedUser?.role;
     const email = typeof storedUser?.email === "string" ? storedUser.email : undefined;
     const gravatarHash = typeof storedUser?.gravatar_hash === "string" ? storedUser.gravatar_hash : undefined;
+    const reactionTotals = storedUser?.reaction_totals;
 
     return {
       token: parsed.token,
@@ -58,6 +63,7 @@ export function readAuth(): StoredAuth | null {
         role: isRole(roleCandidate) ? roleCandidate : "user",
         ...(email ? { email } : {}),
         ...(gravatarHash ? { gravatar_hash: gravatarHash } : {}),
+        ...(reactionTotals ? { reaction_totals: reactionTotals } : {}),
       },
     };
   } catch {

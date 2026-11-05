@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import type { TagItem } from '@/api/tag'
+import type { ReactionSummary, ReactionType } from '@/api/reaction'
 import { tagBadgeStyle } from '@/utils/tagColor'
 import UserAvatar from '@/components/UserAvatar.vue'
+import ReactionBar from '@/components/ReactionBar.vue'
 
 defineProps<{
+  postId: number
   user: string
   title: string
   subtitle: string
   body: string
   userGravatar?: string
   tags?: TagItem[]
+  reactions?: ReactionSummary
+  myReactions?: ReactionType[]
+  reacting?: boolean
 }>()
+
+defineEmits<{ (e: 'react', type: ReactionType): void }>()
 </script>
 
 <template>
@@ -36,6 +44,9 @@ defineProps<{
           #{{ tag.name }}
         </span>
       </div>
+
+      <ReactionBar :reactions="reactions" :my-reactions="myReactions" :busy="reacting"
+        @react="$emit('react', $event)" />
     </div>
   </article>
 </template>

@@ -1,6 +1,10 @@
 package main
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // Role 用户权限。用字符串而不是数字存库：可读、便于以后加角色，也不会因为调整顺序而改变含义。
 type Role string
@@ -19,6 +23,11 @@ type User struct {
 	Role     Role   `gorm:"type:text;not null;default:'user'" json:"role"`
 	// Email 只用于生成 Gravatar 头像，不对外公开（json:"-"）
 	Email string `gorm:"size:254" json:"-"`
+	// 该用户发布的文章收到的反应总数（作者声望），启动时按 reactions 校准
+	LikeCount     int64  `gorm:"not null;default:0" json:"-"`
+	DislikeCount  int64  `gorm:"not null;default:0" json:"-"`
+	QuestionCount int64  `gorm:"not null;default:0" json:"-"`
+	EmojiCounts   string `gorm:"type:text" json:"-"`
 }
 
 // UserView 是对外暴露的用户信息，不含密码 hash
@@ -27,6 +36,8 @@ type UserView struct {
 	Role         Role   `json:"role"`
 	Email        string `json:"email,omitempty"`         // 仅本人可见
 	GravatarHash string `json:"gravatar_hash,omitempty"` // md5(email)，前端据此拼 gravatar 地址
+	// 该用户文章收到的反应总和
+	ReactionTotals ReactionSummary `json:"reaction_totals"`
 }
 
 // View 转成可安全返回给客户端的结构
@@ -36,6 +47,9 @@ func (u User) View() UserView {
 		Role:         u.Role,
 		Email:        u.Email,
 		GravatarHash: gravatarHash(u.Email),
+		ReactionTotals: buildReactionSummary(
+			u.LikeCount, u.DislikeCount, u.QuestionCount, u.EmojiCounts,
+		),
 	}
 }
 
@@ -67,6 +81,58 @@ type Post struct {
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
 	// UserGravatar 是查询时按作者邮箱算出的 MD5，不落库；只暴露哈希，不暴露邮箱
 	UserGravatar string `gorm:"-" json:"user_gravatar,omitempty"`
+
+	// 反应统计（冗余列，启动时按 reactions 全量校准）
+	LikeCount     int64  `gorm:"not null;default:0" json:"-"`
+	DislikeCount  int64  `gorm:"not null;default:0" json:"-"`
+	QuestionCount int64  `gorm:"not null;default:0" json:"-"`
+	EmojiCounts   string `gorm:"type:text" json:"-"`
+
+	// 响应专用（不落库）
+	Reactions   ReactionSummary `gorm:"-" json:"reactions"`
+	MyReactions []ReactionType  `gorm:"-" json:"my_reactions"`
+}
+
+// ReactionType 反应类型。前三个是主反应，其余为 GitHub 风格表情。
+type ReactionType string
+
+const (
+	ReactionLike     ReactionType = "like"
+	ReactionDislike  ReactionType = "dislike"
+	ReactionQuestion ReactionType = "question"
+	ReactionLaugh    ReactionType = "laugh"
+	ReactionHooray   ReactionType = "hooray"
+	ReactionHeart    ReactionType = "heart"
+	ReactionRocket   ReactionType = "rocket"
+	ReactionEyes     ReactionType = "eyes"
+)
+
+// Reaction 一条反应明细。(post_id, user_id, type) 唯一：一人每种只能点一次。
+type Reaction struct {
+	ID        uint         `gorm:"primaryKey"`
+	PostID    uint         `gorm:"uniqueIndex:idx_reaction_unique,priority:1"`
+	UserID    uint         `gorm:"uniqueIndex:idx_reaction_unique,priority:2"`
+	Type      ReactionType `gorm:"uniqueIndex:idx_reaction_unique,priority:3;size:16"`
+	CreatedAt time.Time
+}
+
+// ReactionSummary 反应统计（文章或用户维度）
+type ReactionSummary struct {
+	Like     int64            `json:"like"`
+	Dislike  int64            `json:"dislike"`
+	Question int64            `json:"question"`
+	Emoji    map[string]int64 `json:"emoji,omitempty"`
+}
+
+// ReactionInput 切换反应的请求体
+type ReactionInput struct {
+	Type ReactionType `json:"type" binding:"required"`
+}
+
+// ReactionResult 切换反应后的最新状态
+type ReactionResult struct {
+	Reactions   ReactionSummary `json:"reactions"`
+	MyReactions []ReactionType  `json:"my_reactions"`
 }
 
 // Tag 文章标签。只能由管理员创建，普通用户发帖时最多选择 5 个。

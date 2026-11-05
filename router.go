@@ -27,6 +27,7 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	authed.GET("/post", data.GetPost)
 	authed.GET("/post/:id", data.GetPostByID)
 	authed.POST("/post/new", data.NewPost)
+	authed.POST("/post/:id/reaction", data.ToggleReaction)
 	authed.GET("/tag", data.GetTags)
 
 	// 需要管理员权限的接口

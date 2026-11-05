@@ -3,8 +3,12 @@ import { ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { isApiError } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
+import { EMOJI_REACTIONS, PRIMARY_REACTIONS, reactionCount } from '@/api/reaction'
 
 const auth = useAuthStore()
+
+// 设置页展示「我获得的反应」用
+const allReactions = [...PRIMARY_REACTIONS, ...EMOJI_REACTIONS]
 
 const email = ref(auth.user?.email ?? '')
 const saving = ref(false)
@@ -61,6 +65,15 @@ async function clearEmail() {
               {{ auth.isAdmin ? '管理员' : '普通用户' }}
             </span>
           </p>
+        </div>
+
+        <div v-if="auth.user" class="space-y-2 text-sm">
+          <p class="font-medium">我获得的反应</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <span v-for="option in allReactions" :key="option.type" class="badge badge-sm" :title="option.label">
+              {{ option.emoji }} {{ reactionCount(auth.user?.reaction_totals, option.type) }}
+            </span>
+          </div>
         </div>
 
         <p v-if="auth.isAdmin" class="text-sm text-base-content/60">

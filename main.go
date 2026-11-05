@@ -28,12 +28,17 @@ func main() {
 	}
 
 	// 数据库自动建表
-	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Setting{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}); err != nil {
 		panic(err)
 	}
 
 	// 启动时校准标签使用次数（幂等）
 	if err := syncTagUsageCounts(db); err != nil {
+		panic(err)
+	}
+
+	// 启动时校准文章/用户的反应统计（幂等）
+	if err := syncReactionCounts(db); err != nil {
 		panic(err)
 	}
 

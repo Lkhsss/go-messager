@@ -5,6 +5,7 @@ import Pagination from '@/components/Pagination.vue'
 import TagPicker from '@/components/TagPicker.vue'
 import { fetchPosts, type PostItem } from '@/api/post'
 import type { TagItem } from '@/api/tag'
+import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
 
@@ -15,6 +16,7 @@ const meta = ref<PaginationMeta | null>(null)
 const page = ref(1)
 const loading = ref(false)
 const errorMsg = ref('')
+const reactingPostId = ref<number | null>(null)
 
 // 三态筛选：includeIds 必须包含，excludeIds 必须不包含
 const includeIds = ref<number[]>([])
@@ -62,6 +64,25 @@ function clearFilters() {
   includeIds.value = []
   excludeIds.value = []
   void loadPosts(1)
+}
+
+// 切换反应：用接口返回值局部更新这一条，不整页刷新
+async function onReact(post: PostItem, type: ReactionType) {
+  if (reactingPostId.value !== null) return
+
+  reactingPostId.value = post.ID
+  try {
+    const result = await toggleReaction(post.ID, type)
+    const target = posts.value.find((item) => item.ID === post.ID)
+    if (target) {
+      target.reactions = result.reactions
+      target.my_reactions = result.my_reactions
+    }
+  } catch (err) {
+    errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+  } finally {
+    reactingPostId.value = null
+  }
 }
 
 async function loadPosts(next = page.value) {
@@ -139,8 +160,10 @@ function goTo(next: number) {
 
     <template v-else>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2" :class="{ 'opacity-60': loading }">
-        <Post v-for="post in posts" :key="post.ID" :user="post.user" :title="post.title" :subtitle="post.subtitle"
-          :body="post.body" :user-gravatar="post.user_gravatar" :tags="post.tags" />
+        <Post v-for="post in posts" :key="post.ID" :post-id="post.ID" :user="post.user" :title="post.title"
+          :subtitle="post.subtitle" :body="post.body" :user-gravatar="post.user_gravatar" :tags="post.tags"
+          :reactions="post.reactions" :my-reactions="post.my_reactions" :reacting="reactingPostId === post.ID"
+          @react="onReact(post, $event)" />
       </div>
 
       <div v-if="meta" class="mt-6 flex justify-center">
