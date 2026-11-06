@@ -14,7 +14,8 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	g := r.Group("/api")
 
 	// 公开接口
-	g.GET("/status", data.Status) // 是否已初始化（有没有第一个用户）
+	g.GET("/status", data.Status)    // 是否已初始化（有没有第一个用户）
+	g.GET("/avatar", data.GetAvatar) // 公开：<img> 无法携带 Bearer
 	g.POST("/authorize", data.Authorize)
 	g.POST("/register", data.Register)
 	g.GET("/uptime", data.Uptime)
@@ -23,7 +24,8 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	authed := g.Group("")
 	authed.Use(data.AuthRequired())
 	authed.GET("/me", data.Me)
-	authed.PATCH("/me", data.UpdateMe)
+	authed.PUT("/me/avatar", data.UpdateAvatar)
+	authed.DELETE("/me/avatar", data.DeleteAvatar)
 	authed.GET("/post", data.GetPost)
 	authed.GET("/post/:id", data.GetPostByID)
 	authed.POST("/post/new", data.NewPost)
@@ -37,4 +39,3 @@ func api(r *gin.Engine, db *gorm.DB) error {
 
 	return nil
 }
-

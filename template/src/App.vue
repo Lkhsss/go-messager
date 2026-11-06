@@ -45,7 +45,7 @@ async function logout() {
 
         </div>
         <div class="flex-none flex items-center gap-2">
-          <UserAvatar v-if="auth.user" :name="auth.user.name" :hash="auth.user.gravatar_hash" :size="32" />
+          <UserAvatar v-if="auth.user" :name="auth.user.name" :version="auth.user.avatar_version" :size="32" />
           <span v-if="auth.isAdmin" class="badge badge-primary badge-sm">管理员</span>
           <span v-if="auth.user" class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user.name }}</span>
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>

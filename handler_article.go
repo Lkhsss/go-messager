@@ -73,7 +73,7 @@ func (d *Data) NewPost(c *gin.Context) {
 		return
 	}
 
-	post.UserGravatar = gravatarHash(user.Email)
+	post.UserAvatarVersion = avatarVersion(user.Avatar)
 	post.Reactions = buildReactionSummary(0, 0, 0, "")
 	post.MyReactions = []ReactionType{}
 
@@ -119,7 +119,7 @@ func (d *Data) GetPostByID(c *gin.Context) {
 	}
 
 	result := []Post{post}
-	d.fillPostGravatars(result)
+	d.fillPostAvatars(result)
 	currentUser, _ := CurrentUser(c)
 	d.fillPostReactions(result, currentUser.ID)
 	post = result[0]
@@ -159,7 +159,7 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	}
 
 	ensurePostTags(posts)
-	d.fillPostGravatars(posts)
+	d.fillPostAvatars(posts)
 
 	currentUser, _ := CurrentUser(c)
 	d.fillPostReactions(posts, currentUser.ID)
@@ -287,7 +287,6 @@ func ensurePostTags(posts []Post) {
 		}
 	}
 }
-
 
 // 分页默认值与上限
 const (

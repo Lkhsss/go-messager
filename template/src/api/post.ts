@@ -13,8 +13,8 @@ export interface PostItem {
   title: string;
   subtitle: string;
   body: string;
-  // 作者头像哈希（md5(email)），由后端按作者邮箱计算
-  user_gravatar?: string;
+  // 作者头像版本（头像图片走 /api/avatar 接口）
+  user_avatar_version?: string;
   tags?: TagItem[];
   // 反应汇总 + 当前用户已做出的反应
   reactions?: ReactionSummary;

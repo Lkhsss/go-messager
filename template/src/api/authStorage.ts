@@ -6,10 +6,8 @@ export type Role = "admin" | "user" | "none";
 export interface AuthUser {
   name: string;
   role: Role;
-  // 仅自己可见，用于生成 Gravatar 头像
-  email?: string;
-  // md5(email)，前端用它拼 gravatar.com 地址
-  gravatar_hash?: string;
+  // 头像版本号（换头像后会变化），前端据此拼 /api/avatar 地址
+  avatar_version?: string;
   // 该用户文章收到的反应总和
   reaction_totals?: ReactionSummary;
 }
@@ -51,8 +49,7 @@ export function readAuth(): StoredAuth | null {
     }
 
     const roleCandidate = storedUser?.role;
-    const email = typeof storedUser?.email === "string" ? storedUser.email : undefined;
-    const gravatarHash = typeof storedUser?.gravatar_hash === "string" ? storedUser.gravatar_hash : undefined;
+    const avatarVersion = typeof storedUser?.avatar_version === "string" ? storedUser.avatar_version : undefined;
     const reactionTotals = storedUser?.reaction_totals;
 
     return {
@@ -61,8 +58,7 @@ export function readAuth(): StoredAuth | null {
       user: {
         name,
         role: isRole(roleCandidate) ? roleCandidate : "user",
-        ...(email ? { email } : {}),
-        ...(gravatarHash ? { gravatar_hash: gravatarHash } : {}),
+        ...(avatarVersion ? { avatar_version: avatarVersion } : {}),
         ...(reactionTotals ? { reaction_totals: reactionTotals } : {}),
       },
     };

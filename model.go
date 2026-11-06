@@ -21,8 +21,8 @@ type User struct {
 	// Password 存 bcrypt hash；json:"-" 防止以后误把 User 直接序列化出去
 	Password string `form:"password" json:"-" binding:"required"`
 	Role     Role   `gorm:"type:text;not null;default:'user'" json:"role"`
-	// Email 只用于生成 Gravatar 头像，不对外公开（json:"-"）
-	Email string `gorm:"size:254" json:"-"`
+	// Avatar 头像 data URL（base64 存在数据库里，不直接序列化给客户端）
+	Avatar string `gorm:"type:text" json:"-"`
 	// 该用户发布的文章收到的反应总数（作者声望），启动时按 reactions 校准
 	LikeCount     int64  `gorm:"not null;default:0" json:"-"`
 	DislikeCount  int64  `gorm:"not null;default:0" json:"-"`
@@ -30,12 +30,11 @@ type User struct {
 	EmojiCounts   string `gorm:"type:text" json:"-"`
 }
 
-// UserView 是对外暴露的用户信息，不含密码 hash
+// UserView 是对外暴露的用户信息，不含密码 hash 与头像 base64
 type UserView struct {
-	Name         string `json:"name"`
-	Role         Role   `json:"role"`
-	Email        string `json:"email,omitempty"`         // 仅本人可见
-	GravatarHash string `json:"gravatar_hash,omitempty"` // md5(email)，前端据此拼 gravatar 地址
+	Name          string `json:"name"`
+	Role          Role   `json:"role"`
+	AvatarVersion string `json:"avatar_version,omitempty"` // 头像内容哈希，前端拼 /api/avatar 地址
 	// 该用户文章收到的反应总和
 	ReactionTotals ReactionSummary `json:"reaction_totals"`
 }
@@ -43,10 +42,9 @@ type UserView struct {
 // View 转成可安全返回给客户端的结构
 func (u User) View() UserView {
 	return UserView{
-		Name:         u.Name,
-		Role:         u.Role,
-		Email:        u.Email,
-		GravatarHash: gravatarHash(u.Email),
+		Name:          u.Name,
+		Role:          u.Role,
+		AvatarVersion: avatarVersion(u.Avatar),
 		ReactionTotals: buildReactionSummary(
 			u.LikeCount, u.DislikeCount, u.QuestionCount, u.EmojiCounts,
 		),
@@ -59,16 +57,15 @@ type Credentials struct {
 	Password string `form:"password" json:"password" binding:"required"`
 }
 
-// RegisterInput 注册请求体：邮箱可选，仅用于 Gravatar
+// RegisterInput 注册请求体
 type RegisterInput struct {
 	Name     string `json:"name" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	Email    string `json:"email"`
 }
 
-// UpdateMeInput 修改当前用户资料（目前只有 Gravatar 邮箱）
-type UpdateMeInput struct {
-	Email string `json:"email"`
+// AvatarInput 上传头像的请求体（data URL）
+type AvatarInput struct {
+	Avatar string `json:"avatar"`
 }
 
 type Post struct {
@@ -79,8 +76,8 @@ type Post struct {
 	Body     string `json:"body" binding:"required"`
 	// Tags 与 Tag 是多对多关系，可通过 post.Tags 查标签，也可通过 tag.Posts 反查文章
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
-	// UserGravatar 是查询时按作者邮箱算出的 MD5，不落库；只暴露哈希，不暴露邮箱
-	UserGravatar string `gorm:"-" json:"user_gravatar,omitempty"`
+	// UserAvatarVersion 是作者头像内容的哈希，不落库；前端用它拼 /api/avatar 地址
+	UserAvatarVersion string `gorm:"-" json:"user_avatar_version,omitempty"`
 
 	// 反应统计（冗余列，启动时按 reactions 全量校准）
 	LikeCount     int64  `gorm:"not null;default:0" json:"-"`

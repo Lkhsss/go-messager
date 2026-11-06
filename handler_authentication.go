@@ -83,12 +83,6 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	email, err := normalizeEmail(req.Email)
-	if err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_EMAIL", err.Error())
-		return
-	}
-
 	exists, err := d.IfUserExist(req.Name)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
@@ -105,7 +99,7 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := d.CreateUser(req.Name, string(hashedPassword), email)
+	user, err := d.CreateUser(req.Name, string(hashedPassword))
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
@@ -136,33 +130,3 @@ func (d *Data) Me(c *gin.Context) {
 
 	Response{}.Ok(c, http.StatusOK, user.View())
 }
-
-// UpdateMe 修改当前用户资料 PATCH /api/me（目前只有 Gravatar 邮箱）
-func (d *Data) UpdateMe(c *gin.Context) {
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
-
-	var req UpdateMeInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
-		return
-	}
-
-	email, err := normalizeEmail(req.Email)
-	if err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_EMAIL", err.Error())
-		return
-	}
-
-	if err := d.UpdateUserEmail(user.ID, email); err != nil {
-		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
-		return
-	}
-
-	user.Email = email
-	Response{}.Ok(c, http.StatusOK, user.View())
-}
-

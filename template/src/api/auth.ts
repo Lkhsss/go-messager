@@ -6,11 +6,6 @@ export interface Credentials {
   password: string;
 }
 
-// 注册请求：邮箱可选，仅用于 Gravatar 头像
-export interface RegisterInput extends Credentials {
-  email?: string;
-}
-
 // 与 Go 端 AuthResult 对齐
 export interface AuthResult {
   token: string;
@@ -30,14 +25,8 @@ export async function authorize(credentials: Credentials): Promise<AuthResult> {
 
 // 注册 POST /api/register
 // 库里没有用户时，第一个注册的账号是管理员；成功即登录
-export async function register(input: RegisterInput): Promise<AuthResult> {
-  const payload: RegisterInput = { name: input.name, password: input.password };
-  const email = input.email?.trim();
-  if (email) {
-    payload.email = email;
-  }
-
-  const { data } = await http.post<ApiResponse<AuthResult>>("/register", payload);
+export async function register(credentials: Credentials): Promise<AuthResult> {
+  const { data } = await http.post<ApiResponse<AuthResult>>("/register", credentials);
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "注册失败" };
   }
@@ -54,11 +43,20 @@ export async function fetchMe(): Promise<AuthUser> {
   return data.data;
 }
 
-// 修改当前用户资料 PATCH /api/me（目前只有 Gravatar 邮箱）
-export async function updateMe(email: string): Promise<AuthUser> {
-  const { data } = await http.patch<ApiResponse<AuthUser>>("/me", { email });
+// 上传/替换头像 PUT /api/me/avatar（data URL）
+export async function updateAvatar(avatar: string): Promise<AuthUser> {
+  const { data } = await http.put<ApiResponse<AuthUser>>("/me/avatar", { avatar });
   if (!data.success || !data.data) {
-    throw data.error ?? { code: "UNKNOWN_ERROR", message: "保存失败" };
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "头像保存失败" };
+  }
+  return data.data;
+}
+
+// 清除头像 DELETE /api/me/avatar
+export async function removeAvatar(): Promise<AuthUser> {
+  const { data } = await http.delete<ApiResponse<AuthUser>>("/me/avatar");
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "头像移除失败" };
   }
   return data.data;
 }

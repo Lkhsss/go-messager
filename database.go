@@ -144,7 +144,7 @@ func syncTagUsageCounts(db *gorm.DB) error {
 
 // CreateUser 创建用户并决定角色：库里还没有用户时，第一个用户是 admin。
 // 计数与插入放在同一个事务里，并用 mu 串行化，避免两个并发注册都成为 admin。
-func (d *Data) CreateUser(name string, hash string, email string) (User, error) {
+func (d *Data) CreateUser(name string, hash string) (User, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -155,7 +155,7 @@ func (d *Data) CreateUser(name string, hash string, email string) (User, error) 
 			return err
 		}
 
-		user = User{Name: name, Password: hash, Email: email, Role: RoleUser}
+		user = User{Name: name, Password: hash, Role: RoleUser}
 		if count == 0 {
 			user.Role = RoleAdmin
 		}
@@ -169,10 +169,10 @@ func (d *Data) CreateUser(name string, hash string, email string) (User, error) 
 	return user, nil
 }
 
-// UpdateUserEmail 更新用户用于 Gravatar 的邮箱（空字符串表示清除）。
-func (d *Data) UpdateUserEmail(id uint, email string) error {
-	if err := d.DB.Model(&User{}).Where("id = ?", id).Update("email", email).Error; err != nil {
-		return fmt.Errorf("更新用户[%d]邮箱失败：%w", id, err)
+// UpdateUserAvatar 更新头像 data URL（空字符串表示清除）。
+func (d *Data) UpdateUserAvatar(id uint, avatar string) error {
+	if err := d.DB.Model(&User{}).Where("id = ?", id).Update("avatar", avatar).Error; err != nil {
+		return fmt.Errorf("更新用户[%d]头像失败：%w", id, err)
 	}
 
 	return nil
