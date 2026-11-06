@@ -1,19 +1,32 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { createPost } from '@/api/post'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { createPost, fetchPost, updatePost } from '@/api/post'
 import TagPicker from '@/components/TagPicker.vue'
 import type { TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
 import { renderMarkdown } from '@/utils/markdown'
+import { useAuthStore } from '@/stores/auth'
 
 // 与后端 maxTagsPerPost 保持一致
 const MAX_TAGS = 5
 
+const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+
+const postId = computed(() => {
+  const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+  const value = Number(raw)
+  return Number.isInteger(value) && value > 0 ? value : null
+})
+const isEdit = computed(() => route.name === 'post-edit')
 
 const selectedIds = ref<number[]>([])
+const knownTags = ref<TagItem[]>([])
 const submitting = ref(false)
+const loadingPost = ref(false)
+const loadError = ref('')
 const errorMsg = ref('')
 
 const form = reactive({
@@ -46,23 +59,70 @@ function validate(): string {
   return ''
 }
 
+async function loadPost() {
+  if (!postId.value) {
+    loadError.value = '文章 ID 无效'
+    return
+  }
+
+  loadingPost.value = true
+  loadError.value = ''
+  errorMsg.value = ''
+  try {
+    const post = await fetchPost(postId.value)
+    if (!auth.user || post.user !== auth.user.name) {
+      loadError.value = '只能编辑自己的文章'
+      return
+    }
+
+    form.title = post.title
+    form.subtitle = post.subtitle
+    form.body = post.body
+    knownTags.value = post.tags ?? []
+    selectedIds.value = (post.tags ?? []).map((tag) => tag.ID)
+  } catch (err) {
+    loadError.value = isApiError(err) ? err.message : '加载文章失败，请稍后再试'
+  } finally {
+    loadingPost.value = false
+  }
+}
+
+onMounted(() => {
+  if (isEdit.value) {
+    void loadPost()
+  }
+})
+
 async function onSubmit() {
   if (submitting.value) return
 
   errorMsg.value = validate()
   if (errorMsg.value) return
 
+  const id = isEdit.value ? postId.value : null
+  if (isEdit.value && !id) {
+    errorMsg.value = '文章 ID 无效'
+    return
+  }
+
   submitting.value = true
   try {
-    await createPost({
+    const input = {
       title: form.title.trim(),
       subtitle: form.subtitle.trim(),
       body: form.body,
       tag_ids: selectedIds.value,
-    })
-    await router.replace('/')
+    }
+
+    if (id) {
+      await updatePost(id, input)
+      await router.replace('/my-posts')
+    } else {
+      await createPost(input)
+      await router.replace('/')
+    }
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '发布失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : id ? '保存失败，请稍后再试' : '发布失败，请稍后再试'
   } finally {
     submitting.value = false
   }
@@ -72,11 +132,20 @@ async function onSubmit() {
 <template>
   <main class="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-semibold lg:text-3xl">写文章</h1>
-      <router-link to="/" class="btn btn-ghost btn-sm">返回</router-link>
+      <h1 class="text-2xl font-semibold lg:text-3xl">{{ isEdit ? '编辑文章' : '写文章' }}</h1>
+      <router-link :to="isEdit ? '/my-posts' : '/'" class="btn btn-ghost btn-sm">返回</router-link>
     </div>
 
-    <form class="card bg-base-100 shadow-sm" novalidate @submit.prevent="onSubmit">
+    <div v-if="loadingPost" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+
+    <div v-else-if="loadError" role="alert" class="alert alert-error alert-soft">
+      <span>{{ loadError }}</span>
+      <router-link to="/my-posts" class="btn btn-sm">返回我的文章</router-link>
+    </div>
+
+    <form v-else class="card bg-base-100 shadow-sm" novalidate @submit.prevent="onSubmit">
       <div class="card-body gap-4">
         <label class="floating-label">
           <span>标题</span>
@@ -120,7 +189,8 @@ async function onSubmit() {
             <span class="text-xs text-base-content/60">最多 {{ MAX_TAGS }} 个</span>
           </div>
 
-          <TagPicker mode="select" :selected-ids="selectedIds" :max-select="MAX_TAGS" @toggle="toggleTag" />
+          <TagPicker mode="select" :selected-ids="selectedIds" :max-select="MAX_TAGS" :known-tags="knownTags"
+            @toggle="toggleTag" />
         </div>
 
         <div v-if="errorMsg" role="alert" class="alert alert-error alert-soft py-2 text-sm">
@@ -130,10 +200,12 @@ async function onSubmit() {
         <div class="card-actions justify-end">
           <button type="submit" class="btn btn-primary" :disabled="submitting">
             <span v-if="submitting" class="loading loading-spinner loading-sm"></span>
-            发布
+            {{ isEdit ? '保存修改' : '发布' }}
           </button>
         </div>
       </div>
     </form>
   </main>
 </template>
+
+

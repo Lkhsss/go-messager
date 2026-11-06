@@ -28,6 +28,10 @@ type User struct {
 	DislikeCount  int64  `gorm:"not null;default:0" json:"-"`
 	QuestionCount int64  `gorm:"not null;default:0" json:"-"`
 	EmojiCounts   string `gorm:"type:text" json:"-"`
+
+	// 登录统计：只统计成功登录 /api/authorize 的次数
+	LoginCount  int64      `gorm:"not null;default:0" json:"-"`
+	LastLoginAt *time.Time `json:"-"`
 }
 
 // UserView 是对外暴露的用户信息，不含密码 hash 与头像 base64
@@ -74,6 +78,12 @@ type Post struct {
 	Title    string `json:"title" binding:"required"`
 	Subtitle string `json:"subtitle"`
 	Body     string `json:"body" binding:"required"`
+	// ParentID/RootID 用于评论树：原文两者都为空；顶层评论 RootID=原文，ParentID 为空；回复同时指向父评论和原文
+	ParentID *uint `gorm:"index" json:"parent_id,omitempty"`
+	RootID   *uint `gorm:"index" json:"root_id,omitempty"`
+
+	// IsPrivate 为 true 时仅作者与管理员可见；删除仍使用 gorm.Model 的 DeletedAt 软删除
+	IsPrivate bool `gorm:"not null;default:false" json:"private"`
 	// Tags 与 Tag 是多对多关系，可通过 post.Tags 查标签，也可通过 tag.Posts 反查文章
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
 	// UserAvatarVersion 是作者头像内容的哈希，不落库；前端用它拼 /api/avatar 地址
@@ -156,6 +166,12 @@ type PostInput struct {
 	Body     string `json:"body" binding:"required"`
 	// TagIDs 是已有标签的 ID，最多 maxTagsPerPost 个
 	TagIDs []uint `json:"tag_ids"`
+}
+
+// CommentInput 发表评论/回复的请求体。
+type CommentInput struct {
+	Body     string `json:"body" binding:"required"`
+	ParentID *uint  `json:"parent_id"`
 }
 
 // 设置的条目

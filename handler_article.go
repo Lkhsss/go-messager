@@ -85,6 +85,12 @@ func (d *Data) NewPost(c *gin.Context) {
 //	&include_tag_ids=1,2   必须同时包含所有列出的标签（AND）
 //	&exclude_tag_ids=3,4   不能包含其中任意一个（NOT）
 func (d *Data) GetPost(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
 	include, exclude, filterErr := parseTagFilters(c)
 	if filterErr != nil {
 		Response{}.Fail(c, http.StatusBadRequest, filterErr.Code, filterErr.Message)
@@ -92,15 +98,54 @@ func (d *Data) GetPost(c *gin.Context) {
 	}
 
 	d.listPosts(c, func(db *gorm.DB) *gorm.DB {
-		return applyTagFilter(db, include, exclude)
+		return applyPostVisibility(applyTagFilter(db, include, exclude).Where("root_id IS NULL"), user)
 	})
 }
 
-// 文章详情 GET /api/post/:id（含标签）
-func (d *Data) GetPostByID(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_ID", "文章 ID 无效")
+// applyPostVisibility 普通用户只看公开文章 + 自己发布的 Private 文章；管理员看全部未删除文章。
+func applyPostVisibility(db *gorm.DB, user User) *gorm.DB {
+	if user.Role == RoleAdmin {
+		return db
+	}
+	return db.Where("is_private = ? OR user = ?", false, user.Name)
+}
+
+// canViewPost 判断当前用户能否查看某篇 Private 文章。
+func canViewPost(post Post, user User) bool {
+	return !post.IsPrivate || user.Role == RoleAdmin || post.User == user.Name
+}
+
+// canViewPostThread 评论额外校验所属原文的可见性，避免绕过原文 Private 状态直接给评论点赞。
+func (d *Data) canViewPostThread(post Post, user User) bool {
+	if !canViewPost(post, user) {
+		return false
+	}
+	if post.RootID == nil {
+		return true
+	}
+
+	var root Post
+	if err := d.DB.Take(&root, *post.RootID).Error; err != nil {
+		return false
+	}
+	return canViewPost(root, user)
+}
+
+// postPrivateInput 管理员切换文章 Private 状态的请求体。
+type postPrivateInput struct {
+	Private *bool `json:"private"`
+}
+
+// SetPostPrivate 管理员隐藏/取消隐藏文章 PATCH /api/post/:id/private
+func (d *Data) SetPostPrivate(c *gin.Context) {
+	id, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	var req postPrivateInput
+	if err := c.ShouldBindJSON(&req); err != nil || req.Private == nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", "private 必须是布尔值")
 		return
 	}
 
@@ -114,14 +159,338 @@ func (d *Data) GetPostByID(c *gin.Context) {
 		return
 	}
 
+	if post.RootID != nil {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+	if err := d.DB.Model(&post).Update("is_private", *req.Private).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+	post.IsPrivate = *req.Private
+
+	result := []Post{post}
+	d.fillPostAvatars(result)
+	user, _ := CurrentUser(c)
+	d.fillPostReactions(result, user.ID)
+	Response{}.Ok(c, http.StatusOK, result[0])
+}
+
+// GetMyPosts 当前用户自己的文章 GET /api/me/posts?page=1&per_page=20
+func (d *Data) GetMyPosts(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	d.listPosts(c, func(db *gorm.DB) *gorm.DB {
+		return db.Where("user = ? AND root_id IS NULL", user.Name)
+	})
+}
+
+// UpdatePost 编辑自己的文章 PUT /api/post/:id
+// 只能修改标题、副标题、正文和标签；作者与反应统计不受影响。
+func (d *Data) UpdatePost(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	id, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	var req PostInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
+
+	tagIDs := uniqueIDs(req.TagIDs)
+	if len(tagIDs) > maxTagsPerPost {
+		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
+		return
+	}
+
+	var post Post
+	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	if post.RootID != nil {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+	if post.User != user.Name {
+		Response{}.Fail(c, http.StatusForbidden, "FORBIDDEN", "只能编辑自己的文章")
+		return
+	}
+
+	tags := []Tag{}
+	if len(tagIDs) > 0 {
+		if err := d.DB.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
+			Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+			return
+		}
+		if len(tags) != len(tagIDs) {
+			Response{}.Fail(c, http.StatusBadRequest, "INVALID_TAGS", "包含不存在的标签")
+			return
+		}
+	}
+
+	// 文章字段与多对多关联放在同一事务里；标签使用次数全量校准，避免增量维护出错
+	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&post).Updates(map[string]any{
+			"title":    req.Title,
+			"subtitle": req.Subtitle,
+			"body":     req.Body,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&post).Association("Tags").Replace(tags); err != nil {
+			return err
+		}
+		return syncTagUsageCounts(tx)
+	})
+	if err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	post.Title = req.Title
+	post.Subtitle = req.Subtitle
+	post.Body = req.Body
+	post.Tags = tags
+
+	result := []Post{post}
+	d.fillPostAvatars(result)
+	d.fillPostReactions(result, user.ID)
+	post = result[0]
+
+	Response{}.Ok(c, http.StatusOK, post)
+}
+
+// DeletePost 删除文章 DELETE /api/post/:id（作者或管理员）
+// 使用软删除，文章不再出现在列表/详情；同时校准标签使用次数。
+func (d *Data) DeletePost(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	id, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	var post Post
+	if err := d.DB.Take(&post, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	if post.User != user.Name && user.Role != RoleAdmin {
+		Response{}.Fail(c, http.StatusForbidden, "FORBIDDEN", "只能删除自己的文章")
+		return
+	}
+
+	if err := d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&post).Error; err != nil {
+			return err
+		}
+		return syncTagUsageCounts(tx)
+	}); err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "DELETE_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
+}
+
+const maxCommentLength = 10000
+
+// GetComments 获取某篇文章的评论（扁平列表，前端按 parent_id 组树）GET /api/post/:id/comments
+func (d *Data) GetComments(c *gin.Context) {
+	rootID, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	var root Post
+	if err := d.DB.Take(&root, rootID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	if root.RootID != nil || !canViewPost(root, user) {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+
+	var comments []Post
+	if err := d.DB.Where("root_id = ?", rootID).
+		Order("created_at ASC, id ASC").
+		Find(&comments).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	if comments == nil {
+		comments = []Post{}
+	}
+
+	d.fillPostAvatars(comments)
+	d.fillPostReactions(comments, user.ID)
+	Response{}.Ok(c, http.StatusOK, comments)
+}
+
+// CreateComment 发表评论 POST /api/post/:id/comments
+// 省略 parent_id 是顶层评论；带 parent_id 时必须是同一原文下的评论。
+func (d *Data) CreateComment(c *gin.Context) {
+	rootID, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	var req CommentInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
+	body := strings.TrimSpace(req.Body)
+	if body == "" {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", "评论内容不能为空")
+		return
+	}
+	if len([]rune(body)) > maxCommentLength {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", "评论内容最多 10000 个字符")
+		return
+	}
+
+	var root Post
+	if err := d.DB.Take(&root, rootID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	if root.RootID != nil || !canViewPost(root, user) {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+
+	var parentID *uint
+	if req.ParentID != nil && *req.ParentID > 0 {
+		var parent Post
+		if err := d.DB.Take(&parent, *req.ParentID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				Response{}.Fail(c, http.StatusNotFound, "COMMENT_NOT_FOUND", "父评论不存在")
+				return
+			}
+			Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+			return
+		}
+		if parent.RootID == nil || *parent.RootID != root.ID {
+			Response{}.Fail(c, http.StatusBadRequest, "INVALID_PARENT", "父评论不属于当前文章")
+			return
+		}
+		parentID = &parent.ID
+	}
+
+	comment := Post{
+		User:     user.Name,
+		Body:     body,
+		RootID:   &root.ID,
+		ParentID: parentID,
+	}
+	if err := d.DB.Create(&comment).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
+		return
+	}
+
+	result := []Post{comment}
+	d.fillPostAvatars(result)
+	d.fillPostReactions(result, user.ID)
+	Response{}.Ok(c, http.StatusCreated, result[0])
+}
+
+// parsePostID 解析路径里的文章 ID，非法时直接写 400 响应。
+func parsePostID(c *gin.Context) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_ID", "文章 ID 无效")
+		return 0, false
+	}
+
+	return uint(id), true
+}
+
+// 文章详情 GET /api/post/:id（含标签）
+func (d *Data) GetPostByID(c *gin.Context) {
+	id, ok := parsePostID(c)
+	if !ok {
+		return
+	}
+
+	user, ok := CurrentUser(c)
+	if !ok {
+		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
+		return
+	}
+
+	var post Post
+	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if post.RootID != nil {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+	if !canViewPost(post, user) {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
+
 	if post.Tags == nil {
 		post.Tags = []Tag{}
 	}
 
 	result := []Post{post}
 	d.fillPostAvatars(result)
-	currentUser, _ := CurrentUser(c)
-	d.fillPostReactions(result, currentUser.ID)
+	d.fillPostReactions(result, user.ID)
 	post = result[0]
 
 	Response{}.Ok(c, http.StatusOK, post)

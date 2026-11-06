@@ -39,5 +39,13 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	admin.PUT("/tag/:id", data.UpdateTag)
 	admin.DELETE("/tag/:id", data.DeleteTag)
 
+	authed.GET("/me/posts", data.GetMyPosts)
+	authed.PUT("/post/:id", data.UpdatePost)
+	authed.DELETE("/post/:id", data.DeletePost)
+	admin.PATCH("/post/:id/private", data.SetPostPrivate)
+	authed.GET("/post/:id/comments", data.GetComments)
+	authed.POST("/post/:id/comments", data.CreateComment)
+	authed.GET("/me/stats", data.GetMyStats)
+	admin.GET("/admin/stats", data.GetAdminStats)
 	return nil
 }

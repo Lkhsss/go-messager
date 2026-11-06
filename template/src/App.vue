@@ -83,6 +83,31 @@ async function logout() {
             </router-link>
           </li>
 
+          <!-- 我的文章 -->
+          <li>
+            <router-link to="/my-posts" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip="我的文章">
+              <svg aria-label="我的文章" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 4h7l4 4v12H7z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 4v4h4" />
+              </svg>
+              <span class="is-drawer-close:hidden">我的文章</span>
+            </router-link>
+          </li>
+          <!-- 数据 -->
+          <li>
+            <router-link to="/data" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip="数据">
+              <svg aria-label="数据" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 19V5m0 14h16M8 16l3-5 3 3 4-6" />
+              </svg>
+              <span class="is-drawer-close:hidden">数据</span>
+            </router-link>
+          </li>
           <!-- 仅管理员可见：管理 -->
           <li v-if="auth.isAdmin">
             <router-link to="/admin" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
@@ -111,3 +136,5 @@ async function logout() {
     </div>
   </div>
 </template>
+
+

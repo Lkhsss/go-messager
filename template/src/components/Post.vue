@@ -18,9 +18,17 @@ const props = defineProps<{
   reactions?: ReactionSummary
   myReactions?: ReactionType[]
   reacting?: boolean
+  isPrivate?: boolean
+  canManage?: boolean
+  managing?: boolean
+  detail?: boolean
 }>()
 
-defineEmits<{ (e: 'react', type: ReactionType): void }>()
+defineEmits<{
+  (e: 'react', type: ReactionType): void
+  (e: 'toggle-private'): void
+  (e: 'delete'): void
+}>()
 
 const bodyEl = ref<HTMLElement | null>(null)
 const expanded = ref(false)
@@ -97,21 +105,33 @@ watch(
 <template>
   <article class="card bg-base-100 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <div class="card-body gap-3">
-      <header class="flex items-center gap-3">
+      <header class="flex flex-wrap items-center gap-3">
         <UserAvatar :name="user" :version="userAvatarVersion" :size="40" />
         <div class="min-w-0">
           <p class="truncate font-medium">{{ user }}</p>
         </div>
+        <span v-if="isPrivate" class="badge badge-warning badge-sm">Private</span>
+        <div v-if="canManage" class="ml-auto flex items-center gap-1">
+          <button type="button" class="btn btn-ghost btn-xs" :disabled="managing" @click="$emit('toggle-private')">
+            {{ isPrivate ? '取消隐藏' : '隐藏' }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-xs text-error" :disabled="managing" @click="$emit('delete')">
+            删除
+          </button>
+        </div>
       </header>
 
       <div class="space-y-1">
-        <h2 class="card-title break-words text-lg">{{ title }}</h2>
+        <h2 class="card-title break-words text-lg">
+          <router-link v-if="!detail" :to="`/post/${postId}`" class="hover:underline">{{ title }}</router-link>
+          <span v-else>{{ title }}</span>
+        </h2>
         <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ subtitle }}</p>
       </div>
 
       <div class="relative" @load.capture="onContentLoad">
         <div ref="bodyEl" class="post-body markdown-body text-sm text-base-content/80"
-          :class="{ 'post-body--clamped': !expanded }" v-html="renderedBody"></div>
+          :class="{ 'post-body--clamped': !expanded && !detail }" v-html="renderedBody"></div>
 
         <!-- 折叠时底部渐隐，提示还有内容 -->
         <div v-if="!expanded && overflowing" class="pointer-events-none absolute inset-x-0 bottom-0 h-8"
@@ -119,7 +139,7 @@ watch(
         </div>
       </div>
 
-      <button v-if="overflowing || expanded" type="button" class="btn btn-ghost btn-xs self-start px-1 text-primary"
+      <button v-if="!detail && (overflowing || expanded)" type="button" class="btn btn-ghost btn-xs self-start px-1 text-primary"
         :aria-expanded="expanded" @click="toggleExpanded">
         {{ expanded ? '收起' : '展开全文' }}
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform"
@@ -148,3 +168,5 @@ watch(
   overflow: hidden;
 }
 </style>
+
+

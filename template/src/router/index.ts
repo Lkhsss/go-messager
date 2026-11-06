@@ -4,6 +4,9 @@ import SettingView from "@/views/SettingView.vue";
 import LoginView from "@/views/LoginView.vue";
 import SetupView from "@/views/SetupView.vue";
 import PostCreateView from "@/views/PostCreateView.vue";
+import MyPostsView from "@/views/MyPostsView.vue";
+import DataView from "@/views/DataView.vue";
+import PostDetailView from "@/views/PostDetailView.vue";
 import AdminView from "@/views/AdminView.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useSystemStore } from "@/stores/system";
@@ -49,6 +52,30 @@ const router = createRouter({
       path: "/post/new",
       name: "post-new",
       component: PostCreateView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/post/:id",
+      name: "post-detail",
+      component: PostDetailView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/my-posts",
+      name: "my-posts",
+      component: MyPostsView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/post/:id/edit",
+      name: "post-edit",
+      component: PostCreateView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/data",
+      name: "data",
+      component: DataView,
       meta: { requiresAuth: true },
     },
     {
@@ -111,4 +138,7 @@ router.beforeEach(async (to) => {
 });
 
 export default router;
+
+
+
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { fetchTags, type TagItem } from '@/api/tag'
 import { tagColorStyle } from '@/utils/tagColor'
 
@@ -17,6 +17,8 @@ const props = withDefaults(
     excludeIds?: number[]
     selectedIds?: number[]
     maxSelect?: number
+    // 编辑文章时从文章带进来的标签，保证不在热门列表里也能回显
+    knownTags?: TagItem[]
   }>(),
   {
     mode: 'filter',
@@ -24,6 +26,7 @@ const props = withDefaults(
     excludeIds: () => [],
     selectedIds: () => [],
     maxSelect: 5,
+    knownTags: () => [],
   },
 )
 
@@ -45,6 +48,12 @@ function remember(tags: TagItem[]) {
     tagCache.set(tag.ID, tag)
   }
 }
+
+watch(
+  () => props.knownTags,
+  (tags) => remember(tags),
+  { immediate: true, deep: true },
+)
 
 async function loadHot() {
   loading.value = true
@@ -294,5 +303,6 @@ onBeforeUnmount(() => {
   opacity: 0.7;
 }
 </style>
+
 
 

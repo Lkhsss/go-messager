@@ -142,7 +142,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 	defer d.mu.Unlock()
 
 	var post Post
-	if err := d.DB.Select("id", "user").Take(&post, postID).Error; err != nil {
+	if err := d.DB.Select("id", "user", "is_private", "root_id").Take(&post, postID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
 			return
@@ -151,6 +151,10 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		return
 	}
 
+	if !d.canViewPostThread(post, user) {
+		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
+		return
+	}
 	// 作者（文章按用户名关联用户，用于作者总计）
 	var authorID uint
 	var author User
@@ -341,5 +345,3 @@ func syncReactionCounts(db *gorm.DB) error {
 
 	return nil
 }
-
-

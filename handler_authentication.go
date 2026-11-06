@@ -61,6 +61,13 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
+	// 登录次数只做统计，更新失败不影响正常登录
+	if err := d.DB.Model(&user).Updates(map[string]any{
+		"login_count":   gorm.Expr("login_count + 1"),
+		"last_login_at": time.Now(),
+	}).Error; err != nil {
+		// 统计更新失败时仍允许登录
+	}
 	Response{}.Ok(c, http.StatusOK, AuthResult{
 		Token:     token,
 		ExpiresAt: expiresAt,

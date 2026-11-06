@@ -3,11 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import Post from '@/components/Post.vue'
 import Pagination from '@/components/Pagination.vue'
 import TagPicker from '@/components/TagPicker.vue'
-import { fetchPosts, type PostItem } from '@/api/post'
+import { deletePost, fetchPosts, setPostPrivate, type PostItem } from '@/api/post'
 import type { TagItem } from '@/api/tag'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import { useAuthStore } from '@/stores/auth'
 
 const POSTS_PER_PAGE = 10
 
@@ -17,6 +18,14 @@ const page = ref(1)
 const loading = ref(false)
 const errorMsg = ref('')
 const reactingPostId = ref<number | null>(null)
+
+// 管理员操作
+const auth = useAuthStore()
+const managingPostId = ref<number | null>(null)
+const deleteDialog = ref<HTMLDialogElement | null>(null)
+const deletingPost = ref<PostItem | null>(null)
+const deleting = ref(false)
+const deleteError = ref('')
 
 // 三态筛选：includeIds 必须包含，excludeIds 必须不包含
 const includeIds = ref<number[]>([])
@@ -85,6 +94,70 @@ async function onReact(post: PostItem, type: ReactionType) {
   }
 }
 
+// 管理员隐藏/取消隐藏
+async function onTogglePrivate(post: PostItem) {
+  if (managingPostId.value !== null) return
+
+  managingPostId.value = post.ID
+  errorMsg.value = ''
+  try {
+    const updated = await setPostPrivate(post.ID, !post.private)
+    const target = posts.value.find((item) => item.ID === post.ID)
+    if (target) {
+      target.private = updated.private
+    }
+  } catch (err) {
+    errorMsg.value = isApiError(err) ? err.message : '更新可见性失败，请稍后再试'
+  } finally {
+    managingPostId.value = null
+  }
+}
+
+function openDelete(post: PostItem) {
+  deletingPost.value = post
+  deleteError.value = ''
+  errorMsg.value = ''
+  if (!deleteDialog.value?.open) {
+    deleteDialog.value?.showModal()
+  }
+}
+
+function closeDelete() {
+  if (deleting.value) return
+  deleteDialog.value?.close()
+}
+
+function onDeleteClosed() {
+  deletingPost.value = null
+  deleteError.value = ''
+}
+
+function onDeleteCancel(event: Event) {
+  if (deleting.value) {
+    event.preventDefault()
+  }
+}
+
+async function confirmDelete() {
+  if (deleting.value) return
+
+  const target = deletingPost.value
+  if (!target) return
+
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await deletePost(target.ID)
+    const nextPage = posts.value.length === 1 && page.value > 1 ? page.value - 1 : page.value
+    deleting.value = false
+    deleteDialog.value?.close()
+    await loadPosts(nextPage)
+  } catch (err) {
+    deleteError.value = isApiError(err) ? err.message : '删除失败，请稍后再试'
+  } finally {
+    deleting.value = false
+  }
+}
 async function loadPosts(next = page.value) {
   if (loading.value) return
 
@@ -160,15 +233,44 @@ function goTo(next: number) {
 
     <template v-else>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2" :class="{ 'opacity-60': loading }">
-        <Post v-for="post in posts" :key="post.ID" :post-id="post.ID" :user="post.user" :title="post.title"
+                <Post v-for="post in posts" :key="post.ID" :post-id="post.ID" :user="post.user" :title="post.title"
           :subtitle="post.subtitle" :body="post.body" :user-avatar-version="post.user_avatar_version" :tags="post.tags"
           :reactions="post.reactions" :my-reactions="post.my_reactions" :reacting="reactingPostId === post.ID"
-          @react="onReact(post, $event)" />
+          :is-private="post.private" :can-manage="auth.isAdmin" :managing="managingPostId === post.ID"
+          @react="onReact(post, $event)" @toggle-private="onTogglePrivate(post)" @delete="openDelete(post)" />
       </div>
 
       <div v-if="meta" class="mt-6 flex justify-center">
         <Pagination :page="page" :total-pages="meta.total_pages" :disabled="loading" @change="goTo" />
       </div>
     </template>
+    <!-- 管理员删除文章确认弹窗 -->
+    <dialog ref="deleteDialog" class="modal" @cancel="onDeleteCancel" @close="onDeleteClosed">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold">删除文章</h3>
+
+        <div class="mt-3 space-y-3 text-sm">
+          <p>确定删除「{{ deletingPost?.title }}」吗？</p>
+          <p class="text-base-content/60">删除后文章将从所有列表和详情中消失，数据保留为已删除状态。</p>
+
+          <div v-if="deleteError" role="alert" class="alert alert-error alert-soft py-2 text-sm">
+            <span>{{ deleteError }}</span>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">取消</button>
+          <button type="button" class="btn btn-error" :disabled="deleting" @click="confirmDelete">
+            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
+            删除
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }"><button>close</button></form>
+    </dialog>
   </main>
 </template>
+
+
+
+
