@@ -10,6 +10,8 @@ import { useAuthStore } from '@/stores/auth'
 
 // 与后端 maxTagsPerPost 保持一致
 const MAX_TAGS = 5
+// 与后端 maxPostBodyRunes 保持一致
+const MAX_BODY = 100000
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +40,7 @@ const form = reactive({
 // 编辑 / 预览切换；提交的仍然是 Markdown 原文
 const showPreview = ref(false)
 const previewHtml = computed(() => renderMarkdown(form.body))
+const bodyLength = computed(() => Array.from(form.body).length)
 
 function toggleTag(tag: TagItem) {
   if (selectedIds.value.includes(tag.ID)) {
@@ -56,6 +59,7 @@ function toggleTag(tag: TagItem) {
 function validate(): string {
   if (!form.title.trim()) return '请输入标题'
   if (!form.body.trim()) return '请输入正文'
+  if (bodyLength.value > MAX_BODY) return `正文最多 ${MAX_BODY} 个字符`
   return ''
 }
 
@@ -77,7 +81,7 @@ async function loadPost() {
 
     form.title = post.title
     form.subtitle = post.subtitle
-    form.body = post.body
+    form.body = post.body ?? ''
     knownTags.value = post.tags ?? []
     selectedIds.value = (post.tags ?? []).map((tag) => tag.ID)
   } catch (err) {
@@ -178,6 +182,8 @@ async function onSubmit() {
             <p v-else class="text-base-content/50">暂无内容</p>
           </div>
 
+          <p class="text-right text-xs text-base-content/45">{{ bodyLength }} / {{ MAX_BODY }} 字</p>
+
           <p class="text-xs text-base-content/50">
             支持 Markdown：标题、列表、引用、表格、链接、图片；代码块会渲染为终端窗口样式。
           </p>
@@ -207,5 +213,7 @@ async function onSubmit() {
     </form>
   </main>
 </template>
+
+
 
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { createComment, fetchComments, type CommentItem, type PostItem } from '@/api/post'
+import { createComment, deletePost, fetchComments, type CommentItem, type PostItem } from '@/api/post'
 import { isApiError } from '@/api/http'
 import CommentNode from '@/components/CommentNode.vue'
 
@@ -12,6 +12,12 @@ const loading = ref(false)
 const errorMsg = ref('')
 const body = ref('')
 const submitting = ref(false)
+
+// 删除评论
+const deleteDialog = ref<HTMLDialogElement | null>(null)
+const deletingComment = ref<CommentItem | null>(null)
+const deleting = ref(false)
+const deleteError = ref('')
 
 function buildTree(list: PostItem[]): CommentItem[] {
   const map = new Map<number, CommentItem>()
@@ -68,6 +74,57 @@ async function submitComment() {
   }
 }
 
+function descendantCount(comment: CommentItem): number {
+  let total = 0
+  for (const child of comment.children) {
+    total += 1 + descendantCount(child)
+  }
+  return total
+}
+
+function openDelete(comment: CommentItem) {
+  deletingComment.value = comment
+  deleteError.value = ''
+  if (!deleteDialog.value?.open) {
+    deleteDialog.value?.showModal()
+  }
+}
+
+function closeDelete() {
+  if (deleting.value) return
+  deleteDialog.value?.close()
+}
+
+function onDeleteClosed() {
+  deletingComment.value = null
+  deleteError.value = ''
+}
+
+function onDeleteCancel(event: Event) {
+  if (deleting.value) {
+    event.preventDefault()
+  }
+}
+
+async function confirmDelete() {
+  if (deleting.value) return
+
+  const target = deletingComment.value
+  if (!target) return
+
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await deletePost(target.ID)
+    deleting.value = false
+    deleteDialog.value?.close()
+    await loadComments()
+  } catch (err) {
+    deleteError.value = isApiError(err) ? err.message : '删除评论失败，请稍后再试'
+  } finally {
+    deleting.value = false
+  }
+}
 onMounted(() => {
   void loadComments()
 })
@@ -107,8 +164,37 @@ onMounted(() => {
 
       <div v-else class="space-y-3" :class="{ 'opacity-60': loading }">
         <CommentNode v-for="comment in comments" :key="comment.ID" :comment="comment" :post-id="postId"
-          @created="loadComments" />
+          @created="loadComments" @delete="openDelete" />
       </div>
     </div>
+    <!-- 删除评论确认弹窗 -->
+    <dialog ref="deleteDialog" class="modal" @cancel="onDeleteCancel" @close="onDeleteClosed">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold">删除评论</h3>
+
+        <div class="mt-3 space-y-3 text-sm">
+          <p>确定删除这条评论吗？</p>
+          <p v-if="deletingComment && descendantCount(deletingComment) > 0" class="text-warning">
+            这条评论下还有 {{ descendantCount(deletingComment) }} 条回复，删除后会一并删除。
+          </p>
+          <p class="text-base-content/60">删除后不可恢复。</p>
+
+          <div v-if="deleteError" role="alert" class="alert alert-error alert-soft py-2 text-sm">
+            <span>{{ deleteError }}</span>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">取消</button>
+          <button type="button" class="btn btn-error" :disabled="deleting" @click="confirmDelete">
+            <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
+            删除
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }"><button>close</button></form>
+    </dialog>
   </section>
 </template>
+
+

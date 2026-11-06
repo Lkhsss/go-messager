@@ -12,7 +12,9 @@ export interface PostItem {
   user: string;
   title: string;
   subtitle: string;
-  body: string;
+  body?: string;
+  // 首页摘要（纯文本），列表接口不返回正文
+  excerpt?: string;
   // 管理员隐藏后为 true；仅作者与管理员可见
   private: boolean;
   // 评论字段：原文为空；评论的 root_id 指向原文，parent_id 指向父评论
@@ -178,4 +180,5 @@ export async function createComment(postId: number, body: string, parentId?: num
   }
   return data.data;
 }
+
 

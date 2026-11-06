@@ -234,7 +234,7 @@ function goTo(next: number) {
     <template v-else>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2" :class="{ 'opacity-60': loading }">
                 <Post v-for="post in posts" :key="post.ID" :post-id="post.ID" :user="post.user" :title="post.title"
-          :subtitle="post.subtitle" :body="post.body" :user-avatar-version="post.user_avatar_version" :tags="post.tags"
+          :subtitle="post.subtitle" :excerpt="post.excerpt" :user-avatar-version="post.user_avatar_version" :tags="post.tags"
           :reactions="post.reactions" :my-reactions="post.my_reactions" :reacting="reactingPostId === post.ID"
           :is-private="post.private" :can-manage="auth.isAdmin" :managing="managingPostId === post.ID"
           @react="onReact(post, $event)" @toggle-private="onTogglePrivate(post)" @delete="openDelete(post)" />
@@ -270,6 +270,7 @@ function goTo(next: number) {
     </dialog>
   </main>
 </template>
+
 
 
 

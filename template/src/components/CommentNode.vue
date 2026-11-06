@@ -7,6 +7,7 @@ import { isApiError } from '@/api/http'
 import { renderMarkdown } from '@/utils/markdown'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
+import { useAuthStore } from '@/stores/auth'
 
 defineOptions({ name: 'CommentNode' })
 
@@ -19,7 +20,13 @@ const props = withDefaults(
   { depth: 0 },
 )
 
-const emit = defineEmits<{ (e: 'created'): void }>()
+const emit = defineEmits<{
+  (e: 'created'): void
+  (e: 'delete', comment: CommentItem): void
+}>()
+
+const auth = useAuthStore()
+const canDelete = computed(() => auth.isAdmin || auth.user?.name === props.comment.user)
 
 const replying = ref(false)
 const replyBody = ref('')
@@ -27,7 +34,7 @@ const submitting = ref(false)
 const reacting = ref(false)
 const errorMsg = ref('')
 
-const renderedBody = computed(() => renderMarkdown(props.comment.body))
+const renderedBody = computed(() => renderMarkdown(props.comment.body ?? ''))
 
 function formatDate(value: string): string {
   const date = new Date(value)
@@ -91,6 +98,7 @@ async function onReact(type: ReactionType) {
       <ReactionBar :reactions="comment.reactions" :my-reactions="comment.my_reactions" :busy="reacting"
         @react="onReact" />
       <button type="button" class="btn btn-ghost btn-xs" @click="replying = !replying">回复</button>
+      <button v-if="canDelete" type="button" class="btn btn-ghost btn-xs text-error" @click="$emit('delete', comment)">删除</button>
     </div>
 
     <div v-if="replying" class="mt-2 space-y-2">
@@ -112,7 +120,9 @@ async function onReact(type: ReactionType) {
 
     <div v-if="comment.children.length" class="mt-3 space-y-3">
       <CommentNode v-for="child in comment.children" :key="child.ID" :comment="child" :post-id="postId"
-        :depth="depth + 1" @created="$emit('created')" />
+        :depth="depth + 1" @created="$emit('created')" @delete="$emit('delete', $event)" />
     </div>
   </article>
 </template>
+
+

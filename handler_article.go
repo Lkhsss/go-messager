@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -11,7 +12,56 @@ import (
 )
 
 // 每篇文章最多可选择的标签数
-const maxTagsPerPost = 5
+const (
+	maxTagsPerPost       = 5
+	maxPostBodyRunes     = 100000
+	maxPostTitleRunes    = 120
+	maxPostSubtitleRunes = 200
+	excerptLength        = 300
+)
+
+var (
+	markdownFencePattern = regexp.MustCompile("(?s)```.*?```")
+	markdownImagePattern = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
+	markdownLinkPattern  = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+)
+
+func validatePostLengths(title, subtitle, body string) (string, string) {
+	if len([]rune(title)) > maxPostTitleRunes {
+		return "TITLE_TOO_LONG", "标题最多 120 个字符"
+	}
+	if len([]rune(subtitle)) > maxPostSubtitleRunes {
+		return "SUBTITLE_TOO_LONG", "副标题最多 200 个字符"
+	}
+	if len([]rune(body)) > maxPostBodyRunes {
+		return "BODY_TOO_LONG", "正文最多 100000 个字符"
+	}
+	return "", ""
+}
+
+// buildExcerpt 从 Markdown 正文生成纯文本摘要，最多 300 个可见字符。
+func buildExcerpt(body string) string {
+	text := markdownFencePattern.ReplaceAllString(body, " ")
+	text = markdownImagePattern.ReplaceAllString(text, " ")
+	text = markdownLinkPattern.ReplaceAllString(text, "$1")
+	text = strings.NewReplacer("`", "", "*", "", "_", "", "~", "").Replace(text)
+
+	lines := strings.Split(text, "\n")
+	cleaned := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(strings.TrimLeft(line, "#>-+ \t"))
+		if line != "" {
+			cleaned = append(cleaned, line)
+		}
+	}
+	text = strings.Join(strings.Fields(strings.Join(cleaned, " ")), " ")
+
+	runes := []rune(text)
+	if len(runes) > excerptLength {
+		text = string(runes[:excerptLength]) + "…"
+	}
+	return text
+}
 
 // 创建文章 POST /api/post/new（需登录，作者取自 token，标签最多 5 个）
 func (d *Data) NewPost(c *gin.Context) {
@@ -28,6 +78,10 @@ func (d *Data) NewPost(c *gin.Context) {
 		return
 	}
 
+	if code, message := validatePostLengths(req.Title, req.Subtitle, req.Body); code != "" {
+		Response{}.Fail(c, http.StatusBadRequest, code, message)
+		return
+	}
 	// 去重后再判断数量，防止用重复 ID 绕过上限
 	tagIDs := uniqueIDs(req.TagIDs)
 	if len(tagIDs) > maxTagsPerPost {
@@ -48,11 +102,13 @@ func (d *Data) NewPost(c *gin.Context) {
 	}
 
 	post := Post{
-		User:     user.Name, // 作者由服务端决定，忽略客户端传来的 user
-		Title:    req.Title,
-		Subtitle: req.Subtitle,
-		Body:     req.Body,
-		Tags:     tags,
+		User:      user.Name, // 作者由服务端决定，忽略客户端传来的 user
+		Title:     req.Title,
+		Subtitle:  req.Subtitle,
+		Body:      req.Body,
+		Excerpt:   buildExcerpt(req.Body),
+		CharCount: countTextCharacters(req.Title, req.Subtitle, req.Body),
+		Tags:      tags,
 	}
 
 	// 创建文章与累加标签使用次数放在同一个事务里，避免计数和关联表不一致
@@ -209,6 +265,10 @@ func (d *Data) UpdatePost(c *gin.Context) {
 		return
 	}
 
+	if code, message := validatePostLengths(req.Title, req.Subtitle, req.Body); code != "" {
+		Response{}.Fail(c, http.StatusBadRequest, code, message)
+		return
+	}
 	tagIDs := uniqueIDs(req.TagIDs)
 	if len(tagIDs) > maxTagsPerPost {
 		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
@@ -245,12 +305,17 @@ func (d *Data) UpdatePost(c *gin.Context) {
 		}
 	}
 
+	excerpt := buildExcerpt(req.Body)
+	charCount := countTextCharacters(req.Title, req.Subtitle, req.Body)
+
 	// 文章字段与多对多关联放在同一事务里；标签使用次数全量校准，避免增量维护出错
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&post).Updates(map[string]any{
-			"title":    req.Title,
-			"subtitle": req.Subtitle,
-			"body":     req.Body,
+			"title":      req.Title,
+			"subtitle":   req.Subtitle,
+			"body":       req.Body,
+			"excerpt":    excerpt,
+			"char_count": charCount,
 		}).Error; err != nil {
 			return err
 		}
@@ -267,6 +332,8 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	post.Title = req.Title
 	post.Subtitle = req.Subtitle
 	post.Body = req.Body
+	post.Excerpt = excerpt
+	post.CharCount = charCount
 	post.Tags = tags
 
 	result := []Post{post}
@@ -301,12 +368,24 @@ func (d *Data) DeletePost(c *gin.Context) {
 		return
 	}
 	if post.User != user.Name && user.Role != RoleAdmin {
-		Response{}.Fail(c, http.StatusForbidden, "FORBIDDEN", "只能删除自己的文章")
+		message := "只能删除自己的文章"
+		if post.RootID != nil {
+			message = "只能删除自己的评论"
+		}
+		Response{}.Fail(c, http.StatusForbidden, "FORBIDDEN", message)
 		return
 	}
 
 	if err := d.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&post).Error; err != nil {
+		ids := []uint{post.ID}
+		if post.RootID != nil {
+			var err error
+			ids, err = collectCommentDescendants(tx, post.ID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("id IN ?", ids).Delete(&Post{}).Error; err != nil {
 			return err
 		}
 		return syncTagUsageCounts(tx)
@@ -314,8 +393,33 @@ func (d *Data) DeletePost(c *gin.Context) {
 		Response{}.Fail(c, http.StatusInternalServerError, "DELETE_FAILED", err.Error())
 		return
 	}
-
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
+}
+
+// collectCommentDescendants 收集一条评论及其所有回复的 ID，用于级联软删除。
+func collectCommentDescendants(tx *gorm.DB, rootID uint) ([]uint, error) {
+	ids := []uint{rootID}
+	frontier := []uint{rootID}
+	seen := map[uint]struct{}{rootID: {}}
+
+	for len(frontier) > 0 {
+		var children []uint
+		if err := tx.Model(&Post{}).Where("parent_id IN ?", frontier).Pluck("id", &children).Error; err != nil {
+			return nil, err
+		}
+		next := frontier[:0]
+		for _, id := range children {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+			next = append(next, id)
+		}
+		frontier = next
+	}
+
+	return ids, nil
 }
 
 const maxCommentLength = 10000
@@ -518,6 +622,7 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	// 新文章在前：created_at DESC，同一时间戳用 id DESC 兜底，保证翻页顺序稳定
 	var posts []Post
 	if err := base().
+		Select("id", "created_at", "updated_at", "deleted_at", "user", "title", "subtitle", "excerpt", "is_private", "parent_id", "root_id", "like_count", "dislike_count", "question_count", "emoji_counts", "char_count").
 		Preload("Tags").
 		Order("created_at DESC, id DESC").
 		Limit(perPage).

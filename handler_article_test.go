@@ -484,3 +484,159 @@ func TestComments(t *testing.T) {
 		t.Fatalf("作者向 Private 原文评论应 201，实际 %d：%s", code, describe(resp))
 	}
 }
+
+func TestPostBodyLimitAndExcerpt(t *testing.T) {
+	env := newTestEnv(t)
+
+	admin := env.register(t, "admin", "admin123")
+	user := env.register(t, "bob", "bob12345")
+	_ = admin
+
+	// 正好达到上限
+	exact := strings.Repeat("a", maxPostBodyRunes)
+	limitPost := env.createPost(t, user.Token, PostInput{Title: "limit", Body: exact})
+	if len([]rune(limitPost.Body)) != maxPostBodyRunes {
+		t.Fatalf("正文长度异常：%d", len([]rune(limitPost.Body)))
+	}
+
+	// 超过上限
+	code, resp := env.do(t, http.MethodPost, "/api/post/new", user.Token, PostInput{
+		Title: "too long", Body: strings.Repeat("b", maxPostBodyRunes+1),
+	})
+	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "BODY_TOO_LONG" {
+		t.Fatalf("超长正文应 400 BODY_TOO_LONG，实际 %d：%s", code, describe(resp))
+	}
+
+	body := "# Heading\n\n**bold** [site](https://example.com) and `code`\n\n" + strings.Repeat("word ", 100)
+	code, resp = env.do(t, http.MethodPost, "/api/post/new", user.Token, PostInput{Title: "markdown", Body: body})
+	if code != http.StatusCreated {
+		t.Fatalf("创建 Markdown 文章应 201，实际 %d：%s", code, describe(resp))
+	}
+	created := decode[Post](t, resp)
+	if created.Excerpt == "" || strings.Contains(created.Excerpt, "#") || strings.Contains(created.Excerpt, "http") {
+		t.Fatalf("摘要生成异常：%q", created.Excerpt)
+	}
+	if len([]rune(created.Excerpt)) > excerptLength+1 {
+		t.Fatalf("摘要长度异常：%d", len([]rune(created.Excerpt)))
+	}
+
+	// 列表不返回正文，只返回摘要
+	code, resp = env.do(t, http.MethodGet, "/api/post", user.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("文章列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	posts := decode[[]Post](t, resp)
+	var listed Post
+	found := false
+	for _, post := range posts {
+		if post.ID == created.ID {
+			listed = post
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("列表中没有新文章：%+v", posts)
+	}
+	if listed.Body != "" {
+		t.Fatalf("列表不应返回正文，实际 %d 字节", len(listed.Body))
+	}
+	if listed.Excerpt == "" {
+		t.Fatalf("列表应返回摘要")
+	}
+
+	// 详情返回完整正文
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(created.ID), user.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("文章详情应 200，实际 %d：%s", code, describe(resp))
+	}
+	detail := decode[Post](t, resp)
+	if detail.Body != body {
+		t.Fatalf("详情正文不完整：got %d bytes, want %d", len(detail.Body), len(body))
+	}
+
+	// 更新后摘要同步刷新
+	code, resp = env.do(t, http.MethodPut, "/api/post/"+idString(created.ID), user.Token, PostInput{
+		Title: "updated", Body: "## New heading\n\nnew summary",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("更新文章应 200，实际 %d：%s", code, describe(resp))
+	}
+	updated := decode[Post](t, resp)
+	if updated.Excerpt == "" || strings.Contains(updated.Excerpt, "#") {
+		t.Fatalf("更新后的摘要异常：%q", updated.Excerpt)
+	}
+}
+
+func TestDeleteComment(t *testing.T) {
+	env := newTestEnv(t)
+
+	admin := env.register(t, "admin", "admin123")
+	alice := env.register(t, "alice", "alice123")
+	bob := env.register(t, "bob", "bob12345")
+
+	root := env.createPost(t, alice.Token, PostInput{Title: "article", Body: "body"})
+	commentsPath := "/api/post/" + idString(root.ID) + "/comments"
+
+	code, resp := env.do(t, http.MethodPost, commentsPath, bob.Token, CommentInput{Body: "top"})
+	if code != http.StatusCreated {
+		t.Fatalf("发表评论应 201，实际 %d：%s", code, describe(resp))
+	}
+	top := decode[Post](t, resp)
+
+	parentID := top.ID
+	code, resp = env.do(t, http.MethodPost, commentsPath, alice.Token, CommentInput{Body: "reply", ParentID: &parentID})
+	if code != http.StatusCreated {
+		t.Fatalf("发表回复应 201，实际 %d：%s", code, describe(resp))
+	}
+	nested := decode[Post](t, resp)
+
+	// 非作者不能删除（alice 是原文作者，但不是这条评论作者）
+	code, resp = env.do(t, http.MethodDelete, "/api/post/"+idString(top.ID), alice.Token, nil)
+	if code != http.StatusForbidden || resp.Error == nil || resp.Error.Code != "FORBIDDEN" {
+		t.Fatalf("非作者删除评论应 403 FORBIDDEN，实际 %d：%s", code, describe(resp))
+	}
+
+	// 作者删除父评论，子回复应级联软删除
+	code, resp = env.do(t, http.MethodDelete, "/api/post/"+idString(top.ID), bob.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("作者删除评论应 200，实际 %d：%s", code, describe(resp))
+	}
+
+	code, resp = env.do(t, http.MethodGet, commentsPath, bob.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("评论列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	if comments := decode[[]Post](t, resp); len(comments) != 0 {
+		t.Fatalf("删除父评论后不应还有回复：%+v", comments)
+	}
+
+	var storedTop, storedNested Post
+	if err := env.db.Unscoped().First(&storedTop, top.ID).Error; err != nil {
+		t.Fatalf("查询顶层评论失败：%v", err)
+	}
+	if err := env.db.Unscoped().First(&storedNested, nested.ID).Error; err != nil {
+		t.Fatalf("查询回复失败：%v", err)
+	}
+	if !storedTop.DeletedAt.Valid || !storedNested.DeletedAt.Valid {
+		t.Fatalf("父评论和回复都应为软删除：top=%+v nested=%+v", storedTop.DeletedAt, storedNested.DeletedAt)
+	}
+
+	// 管理员可以删除其他人的评论
+	code, resp = env.do(t, http.MethodPost, commentsPath, bob.Token, CommentInput{Body: "admin delete me"})
+	if code != http.StatusCreated {
+		t.Fatalf("发表第二条评论应 201，实际 %d：%s", code, describe(resp))
+	}
+	second := decode[Post](t, resp)
+	code, resp = env.do(t, http.MethodDelete, "/api/post/"+idString(second.ID), admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("管理员删除评论应 200，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodGet, commentsPath, bob.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("评论列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	if comments := decode[[]Post](t, resp); len(comments) != 0 {
+		t.Fatalf("管理员删除后评论列表应为空：%+v", comments)
+	}
+}

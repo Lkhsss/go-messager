@@ -64,14 +64,14 @@ func (d *Data) GetMyStats(c *gin.Context) {
 	}
 
 	var posts []Post
-	if err := d.DB.Where("user = ? AND root_id IS NULL", user.Name).Find(&posts).Error; err != nil {
+	if err := d.DB.Select("char_count", "like_count", "dislike_count", "question_count").Where("user = ? AND root_id IS NULL", user.Name).Find(&posts).Error; err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
 		return
 	}
 
 	stats := UserStatsResponse{PostCount: int64(len(posts))}
 	for _, post := range posts {
-		stats.WordCount += countTextCharacters(post.Title, post.Subtitle, post.Body)
+		stats.WordCount += post.CharCount
 		stats.Like += post.LikeCount
 		stats.Dislike += post.DislikeCount
 		stats.Question += post.QuestionCount

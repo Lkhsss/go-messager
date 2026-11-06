@@ -77,13 +77,17 @@ type Post struct {
 	User     string `json:"user"` // 作者由服务端根据登录态写入，不接受客户端传值
 	Title    string `json:"title" binding:"required"`
 	Subtitle string `json:"subtitle"`
-	Body     string `json:"body" binding:"required"`
+	Body     string `json:"body,omitempty" binding:"required"`
 	// ParentID/RootID 用于评论树：原文两者都为空；顶层评论 RootID=原文，ParentID 为空；回复同时指向父评论和原文
 	ParentID *uint `gorm:"index" json:"parent_id,omitempty"`
 	RootID   *uint `gorm:"index" json:"root_id,omitempty"`
 
 	// IsPrivate 为 true 时仅作者与管理员可见；删除仍使用 gorm.Model 的 DeletedAt 软删除
 	IsPrivate bool `gorm:"not null;default:false" json:"private"`
+	// Excerpt 首页摘要（纯文本），CharCount 用于统计字数
+	Excerpt   string `gorm:"type:text" json:"excerpt"`
+	CharCount int64  `gorm:"not null;default:0" json:"-"`
+
 	// Tags 与 Tag 是多对多关系，可通过 post.Tags 查标签，也可通过 tag.Posts 反查文章
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
 	// UserAvatarVersion 是作者头像内容的哈希，不落库；前端用它拼 /api/avatar 地址
