@@ -545,8 +545,156 @@ func TestSyncTagUsageCounts(t *testing.T) {
 	}
 }
 
+func TestUpdateTag(t *testing.T) {
+	env := newTestEnv(t)
 
+	admin := env.register(t, "admin", "admin123")
+	user := env.register(t, "bob", "bob12345")
 
+	tag := env.createTagWithColor(t, admin.Token, "Go", "#3b82f6")
+	env.createPost(t, user.Token, PostInput{Title: "p", Body: "x", TagIDs: []uint{tag.ID}})
+	other := env.createTag(t, admin.Token, "Gin")
 
+	path := "/api/tag/" + idString(tag.ID)
 
+	// 普通用户不能编辑
+	code, resp := env.do(t, http.MethodPut, path, user.Token, TagInput{Name: "Golang"})
+	if code != http.StatusForbidden || resp.Error == nil || resp.Error.Code != "FORBIDDEN" {
+		t.Fatalf("普通用户编辑标签应 403 FORBIDDEN，实际 %d：%s", code, describe(resp))
+	}
 
+	// ID 非法 / 标签不存在
+	code, resp = env.do(t, http.MethodPut, "/api/tag/abc", admin.Token, TagInput{Name: "Golang"})
+	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_ID" {
+		t.Fatalf("非法 ID 应 400 INVALID_ID，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodPut, "/api/tag/99999", admin.Token, TagInput{Name: "Golang"})
+	if code != http.StatusNotFound || resp.Error == nil || resp.Error.Code != "TAG_NOT_FOUND" {
+		t.Fatalf("不存在的标签应 404 TAG_NOT_FOUND，实际 %d：%s", code, describe(resp))
+	}
+
+	// 名称长度 / 颜色校验
+	code, resp = env.do(t, http.MethodPut, path, admin.Token, TagInput{Name: strings.Repeat("a", 31)})
+	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_NAME" {
+		t.Fatalf("超长名称应 400 INVALID_NAME，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodPut, path, admin.Token, TagInput{Name: "Golang", Color: "#12345"})
+	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_COLOR" {
+		t.Fatalf("非法颜色应 400 INVALID_COLOR，实际 %d：%s", code, describe(resp))
+	}
+
+	// 不能改成其他标签的名字
+	code, resp = env.do(t, http.MethodPut, path, admin.Token, TagInput{Name: other.Name})
+	if code != http.StatusConflict || resp.Error == nil || resp.Error.Code != "TAG_EXIST" {
+		t.Fatalf("重名应 409 TAG_EXIST，实际 %d：%s", code, describe(resp))
+	}
+
+	// 正常更新：去空格、#ABC 归一化为 #aabbcc、使用次数保持不变
+	code, resp = env.do(t, http.MethodPut, path, admin.Token, TagInput{Name: " Golang ", Color: "#ABC"})
+	if code != http.StatusOK {
+		t.Fatalf("编辑标签应 200，实际 %d：%s", code, describe(resp))
+	}
+	updated := decode[Tag](t, resp)
+	if updated.ID != tag.ID || updated.Name != "Golang" || updated.Color != "#aabbcc" {
+		t.Fatalf("编辑结果异常：%+v", updated)
+	}
+	if updated.UsageCount != 1 {
+		t.Fatalf("编辑后使用次数应保持 1，实际 %d", updated.UsageCount)
+	}
+
+	// 保持原名只改颜色不应误判重名；color 传空表示恢复默认灰
+	code, resp = env.do(t, http.MethodPut, path, admin.Token, TagInput{Name: "Golang", Color: ""})
+	if code != http.StatusOK {
+		t.Fatalf("保持原名的编辑应 200，实际 %d：%s", code, describe(resp))
+	}
+	updated = decode[Tag](t, resp)
+	if updated.Color != "" || updated.Name != "Golang" || updated.UsageCount != 1 {
+		t.Fatalf("清空颜色结果异常：%+v", updated)
+	}
+
+	var stored Tag
+	if err := env.db.First(&stored, tag.ID).Error; err != nil {
+		t.Fatalf("查询标签失败：%v", err)
+	}
+	if stored.Name != "Golang" || stored.Color != "" {
+		t.Fatalf("数据库中的标签未更新：%+v", stored)
+	}
+}
+
+func TestDeleteTag(t *testing.T) {
+	env := newTestEnv(t)
+
+	admin := env.register(t, "admin", "admin123")
+	user := env.register(t, "bob", "bob12345")
+
+	tag := env.createTag(t, admin.Token, "Go")
+	other := env.createTag(t, admin.Token, "Gin")
+	post := env.createPost(t, user.Token, PostInput{
+		Title: "p", Body: "x", TagIDs: []uint{tag.ID, other.ID},
+	})
+
+	path := "/api/tag/" + idString(tag.ID)
+
+	// 普通用户不能删除
+	code, resp := env.do(t, http.MethodDelete, path, user.Token, nil)
+	if code != http.StatusForbidden || resp.Error == nil || resp.Error.Code != "FORBIDDEN" {
+		t.Fatalf("普通用户删除标签应 403 FORBIDDEN，实际 %d：%s", code, describe(resp))
+	}
+
+	// ID 非法 / 标签不存在
+	code, resp = env.do(t, http.MethodDelete, "/api/tag/abc", admin.Token, nil)
+	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_ID" {
+		t.Fatalf("非法 ID 应 400 INVALID_ID，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodDelete, "/api/tag/99999", admin.Token, nil)
+	if code != http.StatusNotFound || resp.Error == nil || resp.Error.Code != "TAG_NOT_FOUND" {
+		t.Fatalf("不存在的标签应 404 TAG_NOT_FOUND，实际 %d：%s", code, describe(resp))
+	}
+
+	// 管理员删除正在被文章使用的标签
+	code, resp = env.do(t, http.MethodDelete, path, admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("删除标签应 200，实际 %d：%s", code, describe(resp))
+	}
+
+	// 标签硬删除，post_tags 关联也被清理
+	var count int64
+	if err := env.db.Unscoped().Model(&Tag{}).Where("id = ?", tag.ID).Count(&count).Error; err != nil {
+		t.Fatalf("查询标签失败：%v", err)
+	}
+	if count != 0 {
+		t.Fatalf("标签应被硬删除，实际仍存在 %d 条", count)
+	}
+	if err := env.db.Table("post_tags").Where("tag_id = ?", tag.ID).Count(&count).Error; err != nil {
+		t.Fatalf("查询关联表失败：%v", err)
+	}
+	if count != 0 {
+		t.Fatalf("post_tags 关联应被清理，实际仍有 %d 条", count)
+	}
+
+	// 列表只剩 Gin
+	code, resp = env.do(t, http.MethodGet, "/api/tag", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("标签列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	remaining := decode[[]Tag](t, resp)
+	if len(remaining) != 1 || remaining[0].ID != other.ID {
+		t.Fatalf("删除后标签列表异常：%+v", remaining)
+	}
+
+	// 文章本身还在，只是不再带被删除的标签
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(post.ID), user.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("文章详情应 200，实际 %d：%s", code, describe(resp))
+	}
+	got := decode[Post](t, resp)
+	if len(got.Tags) != 1 || got.Tags[0].ID != other.ID {
+		t.Fatalf("删除标签后文章标签异常：%+v", got.Tags)
+	}
+
+	// 硬删除后可以重新创建同名标签
+	recreated := env.createTag(t, admin.Token, "Go")
+	if recreated.ID == 0 || recreated.Name != "Go" {
+		t.Fatalf("重建同名标签失败：%+v", recreated)
+	}
+}

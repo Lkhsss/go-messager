@@ -36,6 +36,8 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	admin := g.Group("")
 	admin.Use(data.AuthRequired(), data.AdminOnly())
 	admin.POST("/tag", data.CreateTag)
+	admin.PUT("/tag/:id", data.UpdateTag)
+	admin.DELETE("/tag/:id", data.DeleteTag)
 
 	return nil
 }

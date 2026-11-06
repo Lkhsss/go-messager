@@ -53,3 +53,22 @@ export async function createTag(name: string, color = ""): Promise<TagItem> {
   return data.data;
 }
 
+// 编辑标签 PUT /api/tag/:id（仅管理员）
+// color 传空字符串表示恢复默认高级灰
+export async function updateTag(id: number, name: string, color = ""): Promise<TagItem> {
+  const { data } = await http.put<ApiResponse<TagItem>>(`/tag/${id}`, { name, color });
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "更新标签失败" };
+  }
+  return data.data;
+}
+
+// 删除标签 DELETE /api/tag/:id（仅管理员）
+// 后端会同时清理文章与标签的关联，文章本身保留
+export async function deleteTag(id: number): Promise<void> {
+  const { data } = await http.delete<ApiResponse<{ id: number }>>(`/tag/${id}`);
+  if (!data.success) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "删除标签失败" };
+  }
+}
+
