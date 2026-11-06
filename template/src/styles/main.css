@@ -1,2 +1,161 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+/* Markdown 正文（文章卡片与发布预览共用） */
+.markdown-body {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p {
+  margin: 0.5em 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdown-body h1 { font-size: 1.25em; }
+.markdown-body h2 { font-size: 1.15em; }
+.markdown-body h3 { font-size: 1.05em; }
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 { font-size: 1em; }
+
+.markdown-body ul {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.markdown-body ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.markdown-body li {
+  margin: 0.15em 0;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: 0.15em 0;
+}
+
+.markdown-body blockquote {
+  margin: 0.75em 0;
+  padding-left: 0.75em;
+  border-left: 3px solid var(--color-base-300, #d1d5db);
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+
+.markdown-body :not(pre) > code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.85em;
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.markdown-body a {
+  color: var(--color-primary, #3b82f6);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.5em 0;
+  border-radius: 0.5rem;
+}
+
+.markdown-body hr {
+  margin: 1em 0;
+  border-color: var(--color-base-300, #d1d5db);
+}
+
+.markdown-body table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--color-base-300, #d1d5db);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  font-weight: 600;
+}
+
+/* 代码块：daisyUI mockup-code 终端窗口 */
+.markdown-body .mockup-code {
+  margin: 0.75em 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.markdown-body .mockup-code pre {
+  margin: 0;
+  white-space: pre;
+  min-height: 1.5em;
+}
+
+.markdown-body .mockup-code code {
+  display: inline;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+/* 行号：daisyUI 的固定 2rem 前缀宽度改大一点，容纳多位数 */
+.markdown-body .mockup-code pre[data-prefix]::before {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  padding-right: 0.5ch;
+  margin-right: 1.5ch;
+}
+
+/* 右上角的语言名（行号占用了 data-prefix） */
+.markdown-body .mockup-code > .code-lang {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.5;
+  user-select: none;
+}
+
+/* 高亮主题只提供 token 颜色，背景交给 mockup-code；
+   每行是独立的 <pre>，code 必须是 inline，否则行号和代码会分成两行 */
+.markdown-body .mockup-code .hljs {
+  display: inline;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}

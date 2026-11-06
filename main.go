@@ -18,7 +18,7 @@ var frontendFS embed.FS
 func main() {
 	StartTimer() // 启动计时器，记录进程启动时刻
 
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 
 	r := gin.Default()
 

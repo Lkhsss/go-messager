@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createPost } from '@/api/post'
 import TagPicker from '@/components/TagPicker.vue'
 import type { TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
+import { renderMarkdown } from '@/utils/markdown'
 
 // 与后端 maxTagsPerPost 保持一致
 const MAX_TAGS = 5
@@ -20,6 +21,10 @@ const form = reactive({
   subtitle: '',
   body: '',
 })
+
+// 编辑 / 预览切换；提交的仍然是 Markdown 原文
+const showPreview = ref(false)
+const previewHtml = computed(() => renderMarkdown(form.body))
 
 function toggleTag(tag: TagItem) {
   if (selectedIds.value.includes(tag.ID)) {
@@ -85,11 +90,29 @@ async function onSubmit() {
             class="input input-bordered w-full" :disabled="submitting" />
         </label>
 
-        <label class="floating-label">
-          <span>正文</span>
-          <textarea v-model="form.body" name="body" rows="10" placeholder="写点什么…"
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">正文</span>
+            <div class="join">
+              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': !showPreview }"
+                @click="showPreview = false">编辑</button>
+              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': showPreview }"
+                @click="showPreview = true">预览</button>
+            </div>
+          </div>
+
+          <textarea v-if="!showPreview" v-model="form.body" name="body" rows="12" placeholder="支持 Markdown…"
             class="textarea textarea-bordered w-full" :disabled="submitting"></textarea>
-        </label>
+
+          <div v-else class="markdown-body min-h-48 rounded-box border border-base-300 bg-base-100 p-3 text-sm">
+            <div v-if="previewHtml" v-html="previewHtml"></div>
+            <p v-else class="text-base-content/50">暂无内容</p>
+          </div>
+
+          <p class="text-xs text-base-content/50">
+            支持 Markdown：标题、列表、引用、表格、链接、图片；代码块会渲染为终端窗口样式。
+          </p>
+        </div>
 
         <div class="space-y-2">
           <div class="flex items-center justify-between">

@@ -1,3 +1,4 @@
+import "highlight.js/styles/github-dark.css";
 import "./styles/main.css";
 
 import { createApp } from "vue";

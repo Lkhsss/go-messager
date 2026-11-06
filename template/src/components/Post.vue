@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TagItem } from '@/api/tag'
 import type { ReactionSummary, ReactionType } from '@/api/reaction'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import { renderMarkdown } from '@/utils/markdown'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 
@@ -25,6 +26,16 @@ const bodyEl = ref<HTMLElement | null>(null)
 const expanded = ref(false)
 const overflowing = ref(false)
 let resizeTimer: ReturnType<typeof setTimeout> | undefined
+
+// Markdown 渲染结果已经过 DOMPurify 消毒，可以安全用于 v-html
+const renderedBody = computed(() => renderMarkdown(props.body))
+
+function onContentLoad() {
+  // 图片/字体等内容加载完成后重新测量折叠状态
+  if (!expanded.value) {
+    void measure()
+  }
+}
 
 // 折叠状态下比较 scrollHeight 与 clientHeight：被截断才显示「展开全文」
 async function measure() {
@@ -98,9 +109,9 @@ watch(
         <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ subtitle }}</p>
       </div>
 
-      <div class="relative">
-        <p ref="bodyEl" class="post-body whitespace-pre-line break-words text-sm leading-relaxed text-base-content/80"
-          :class="{ 'post-body--clamped': !expanded }">{{ body }}</p>
+      <div class="relative" @load.capture="onContentLoad">
+        <div ref="bodyEl" class="post-body markdown-body text-sm text-base-content/80"
+          :class="{ 'post-body--clamped': !expanded }" v-html="renderedBody"></div>
 
         <!-- 折叠时底部渐隐，提示还有内容 -->
         <div v-if="!expanded && overflowing" class="pointer-events-none absolute inset-x-0 bottom-0 h-8"
@@ -131,9 +142,9 @@ watch(
 </template>
 
 <style scoped>
-/* 折叠时最多显示 6 行（leading-relaxed = 1.625 倍行高） */
+/* 折叠时最多显示 6 行（.markdown-body 的行高为 1.7） */
 .post-body--clamped {
-  max-height: calc(6 * 1.625em);
+  max-height: calc(6 * 1.7em);
   overflow: hidden;
 }
 </style>
