@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +30,49 @@ type Data struct {
 	// mu 保护「第一个用户成为 admin」的计数与插入。
 	// 当前是单实例部署，进程内互斥足够；多实例部署时应改成数据库约束。
 	mu sync.Mutex
+}
+
+// openDatabase 打开 SQLite 数据库。
+// 失败时把库路径和排查方向写进错误信息：sqlite 原始报错通常只有
+// "unable to open database file"，在容器里看不出是路径、权限还是磁盘问题。
+func openDatabase(dbPath string) (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("打开数据库[%s]失败：%w（请检查该文件及所在目录对运行用户是否可读写，以及磁盘剩余空间）", dbPath, err)
+	}
+
+	return db, nil
+}
+
+// checkDatabaseWritable 在打开数据库前探测写权限。
+// SQLite 除了要写库文件，还要在同一个目录下创建 journal/WAL 文件，
+// 所以目录不可写同样会打开失败。容器以非 root 用户运行时，
+// bind mount 进来的宿主目录属主往往还是 root，提前探测能把这类问题
+// 直接暴露成「不可写」，而不是打开时一句抽象的错误。
+func checkDatabaseWritable(dbPath string) error {
+	file, err := os.OpenFile(dbPath, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return fmt.Errorf("数据库文件[%s]不可写：%w（Docker bind mount 时请把宿主目录属主改成容器运行用户）", dbPath, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("关闭数据库文件[%s]失败：%w", dbPath, err)
+	}
+
+	dir := filepath.Dir(dbPath)
+	probe, err := os.CreateTemp(dir, ".go-messager-write-*")
+	if err != nil {
+		return fmt.Errorf("数据库目录[%s]不可写：%w（SQLite 需要在同目录创建 journal/WAL 文件）", dir, err)
+	}
+
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("关闭临时文件[%s]失败：%w", name, err)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("删除临时文件[%s]失败：%w", name, err)
+	}
+
+	return nil
 }
 
 // NewData 初始化数据层：确定 JWT 密钥与有效期。

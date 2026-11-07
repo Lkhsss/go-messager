@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.1.3
+v0.1.4
 
 Go语言制作的极简论坛
 
@@ -44,6 +44,35 @@ docker run -d --name go-messager -p 8080:8080 \
 mkdir -p data
 mv data.db data/data.db
 ```
+
+### Docker 部署注意：`/data` 权限
+
+镜像内以非 root 的 `app` 用户运行（Alpine 系统用户），而 bind mount 进来的宿主目录通常属于 `root`。
+SQLite 既要能读写库文件，也要能在同目录创建 journal/WAL 文件，权限不对时启动会直接 panic：
+
+```text
+panic: 数据库文件[/data/data.db]不可写：open /data/data.db: permission denied
+main.main()
+        go-messager/main.go:43
+```
+
+完整报错见第一行（`docker compose logs --no-color go-messager | head -5`）。处理方式任选其一：
+
+1. 把宿主目录属主改成容器内运行用户（推荐）：
+
+   ```bash
+   # 查询镜像内 app 用户的 uid/gid
+   docker compose run --rm --entrypoint id go-messager app
+   # 按上面的 uid/gid 改属主，例如都是 100
+   sudo chown -R 100:100 /data/go_messager/data
+   docker compose up -d --force-recreate go-messager
+   ```
+
+2. 改用 named volume：`volumes: ["go-messager-data:/data"]`。首次创建时 Docker 会沿用镜像内 `/data` 的属主，无需额外 chown。
+
+3. 临时以 root 运行：在 compose 里加 `user: "0:0"`（不推荐，容器进程会以 root 身份写宿主目录）。
+
+> 从旧版本（以 root 运行）升级到当前版本时，`/data/data.db` 可能仍是 `root:root`，同样需要执行上面的 chown。
 
 ## 镜像构建
 

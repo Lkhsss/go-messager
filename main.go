@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 )
 
 //go:embed template/dist
@@ -36,11 +34,20 @@ func main() {
 		panic(err)
 	}
 
+	// 打开前先确认库文件与所在目录可写：
+	// 容器以非 root 用户运行时，bind mount 的 /data 属主常常还是 root，
+	// 这一步能把「权限不对」直接报出来，而不是等到 sqlite 抛抽象错误。
+	if err := checkDatabaseWritable(cfg.Database.Path); err != nil {
+		panic(err)
+	}
+
 	r := gin.Default()
 
-	db, err := gorm.Open(sqlite.Open(cfg.Database.Path), &gorm.Config{})
+	log.Printf("数据库文件：%s", cfg.Database.Path)
+
+	db, err := openDatabase(cfg.Database.Path)
 	if err != nil {
-		panic(err) // 或 log.Fatal(err)
+		panic(err)
 	}
 
 	// 数据库自动建表
@@ -80,7 +87,6 @@ func main() {
 	}
 
 	addr := cfg.ListenAddr()
-	log.Printf("数据库文件：%s", cfg.Database.Path)
 	log.Printf("监听地址：%s", addr)
 	if err := r.Run(addr); err != nil {
 		panic(err)
