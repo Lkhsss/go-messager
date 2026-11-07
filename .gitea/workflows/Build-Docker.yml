@@ -44,7 +44,7 @@ env:
   #   ① 把基础镜像改写成该镜像站的地址（不依赖 BuildKit 是否读取 buildkitd.toml）
   #   ② 同时写进 buildkitd.toml 作为兜底
   # 默认第一项是当前 runner 上 dockerd 正在使用的阿里云加速地址，可按需覆盖。
-  DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || '47k76iq5.mirror.aliyuncs.com,docker.1ms.run,docker.1panel.live' }}
+  DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run' }}
   # 基础镜像；留空则由探测到的镜像站自动拼装（如 <mirror>/library/node:24-alpine），
   # 显式设置时（如 vars.NODE_IMAGE=node:24-alpine）原样使用
   NODE_IMAGE: ${{ vars.NODE_IMAGE || '' }}
