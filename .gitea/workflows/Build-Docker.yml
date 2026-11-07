@@ -40,15 +40,16 @@ env:
   # 国内 Go 模块代理与校验数据库；可在仓库 Variables 中覆盖
   GOPROXY: ${{ vars.GOPROXY || 'https://goproxy.cn,direct' }}
   GOSUMDB: ${{ vars.GOSUMDB || 'sum.golang.google.cn' }}
-  # docker.io 镜像加速地址（英文逗号分隔），会写入 BuildKit 的 buildkitd.toml。
-  # 注意：runner 上 dockerd 的 registry-mirrors 不会传递给 buildx 的
-  # docker-container builder，必须显式配置，否则拉取 node/golang/alpine 基础镜像会超时。
-  # 置空则直连 docker.io；也可换成自建/云厂商的加速地址。
-  DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run,docker.m.daocloud.io,docker.1panel.live' }}
-  # 基础镜像，默认走 docker.io；加速配置不生效时可在这里直接改成镜像站地址
-  NODE_IMAGE: ${{ vars.NODE_IMAGE || 'node:24-alpine' }}
-  GO_IMAGE: ${{ vars.GO_IMAGE || 'golang:1.27-alpine' }}
-  RUNTIME_IMAGE: ${{ vars.RUNTIME_IMAGE || 'alpine:3.22' }}
+  # docker.io 镜像加速地址（英文逗号分隔），CI 会依次探测，选中第一个可用的：
+  #   ① 把基础镜像改写成该镜像站的地址（不依赖 BuildKit 是否读取 buildkitd.toml）
+  #   ② 同时写进 buildkitd.toml 作为兜底
+  # 默认第一项是当前 runner 上 dockerd 正在使用的阿里云加速地址，可按需覆盖。
+  DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || '47k76iq5.mirror.aliyuncs.com,docker.1ms.run,docker.1panel.live' }}
+  # 基础镜像；留空则由探测到的镜像站自动拼装（如 <mirror>/library/node:24-alpine），
+  # 显式设置时（如 vars.NODE_IMAGE=node:24-alpine）原样使用
+  NODE_IMAGE: ${{ vars.NODE_IMAGE || '' }}
+  GO_IMAGE: ${{ vars.GO_IMAGE || '' }}
+  RUNTIME_IMAGE: ${{ vars.RUNTIME_IMAGE || '' }}
 
 jobs:
   test:
@@ -108,29 +109,58 @@ jobs:
       - name: 设置 QEMU（多架构构建）
         uses: docker/setup-qemu-action@v4
 
-      - name: 生成 BuildKit 配置（docker.io 镜像加速）
+      - name: 探测 docker.io 镜像加速并生成 BuildKit 配置
+        id: mirror
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .buildx
+          prefix=""
+          reachable=()
+          if [[ -n "${DOCKER_MIRRORS:-}" ]]; then
+            IFS=',' read -ra list <<< "${DOCKER_MIRRORS}"
+            for mirror in "${list[@]}"; do
+              mirror="$(printf '%s' "${mirror}" | tr -d '[:space:]')"
+              if [[ -z "${mirror}" ]]; then
+                continue
+              fi
+              code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' "https://${mirror}/v2/" || true)"
+              echo "镜像站 ${mirror}/v2/ -> HTTP ${code:-连接失败}"
+              if [[ "${code}" == "200" || "${code}" == "401" ]]; then
+                reachable+=("${mirror}")
+                if [[ -z "${prefix}" ]]; then
+                  prefix="${mirror}/library/"
+                fi
+              fi
+            done
+          fi
+
           {
             echo "# 由 CI 自动生成：docker.io 镜像加速（可用仓库变量 DOCKER_MIRRORS 覆盖）"
-            mirrors=""
-            if [[ -n "${DOCKER_MIRRORS:-}" ]]; then
-              IFS=',' read -ra list <<< "${DOCKER_MIRRORS}"
-              for mirror in "${list[@]}"; do
-                mirror="$(printf '%s' "${mirror}" | tr -d '[:space:]')"
-                if [[ -z "${mirror}" ]]; then
-                  continue
-                fi
-                mirrors="${mirrors:+${mirrors}, }\"${mirror}\""
+            if [[ "${#reachable[@]}" -gt 0 ]]; then
+              mirrors_toml=""
+              for mirror in "${reachable[@]}"; do
+                mirrors_toml="${mirrors_toml:+${mirrors_toml}, }\"${mirror}\""
               done
-            fi
-            if [[ -n "${mirrors}" ]]; then
-              printf '[registry."docker.io"]\n  mirrors = [%s]\n' "${mirrors}"
+              printf '[registry."docker.io"]\n  mirrors = [%s]\n' "${mirrors_toml}"
             fi
           } > .buildx/buildkitd.toml
+
+          node_image="${NODE_IMAGE:-${prefix}node:24-alpine}"
+          go_image="${GO_IMAGE:-${prefix}golang:1.27-alpine}"
+          runtime_image="${RUNTIME_IMAGE:-${prefix}alpine:3.22}"
+          {
+            echo "node_image=${node_image}"
+            echo "go_image=${go_image}"
+            echo "runtime_image=${runtime_image}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "BuildKit 配置："
           cat .buildx/buildkitd.toml
+          echo "构建使用的基础镜像："
+          echo "  NODE_IMAGE=${node_image}"
+          echo "  GO_IMAGE=${go_image}"
+          echo "  RUNTIME_IMAGE=${runtime_image}"
 
       - name: 设置 Buildx
         uses: docker/setup-buildx-action@v4
@@ -173,9 +203,9 @@ jobs:
           build-args: |
             GOPROXY=${{ env.GOPROXY }}
             GOSUMDB=${{ env.GOSUMDB }}
-            NODE_IMAGE=${{ env.NODE_IMAGE }}
-            GO_IMAGE=${{ env.GO_IMAGE }}
-            RUNTIME_IMAGE=${{ env.RUNTIME_IMAGE }}
+            NODE_IMAGE=${{ steps.mirror.outputs.node_image }}
+            GO_IMAGE=${{ steps.mirror.outputs.go_image }}
+            RUNTIME_IMAGE=${{ steps.mirror.outputs.runtime_image }}
           pull: true
           # 部分自建 registry 不支持 OCI attestation，关闭 provenance 以保证兼容
           provenance: false
