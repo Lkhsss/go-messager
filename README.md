@@ -53,7 +53,7 @@ SQLite 既要能读写库文件，也要能在同目录创建 journal/WAL 文件
 ```text
 panic: 数据库文件[/data/data.db]不可写：open /data/data.db: permission denied
 main.main()
-        go-messager/main.go:43
+        go-messager/main.go:41
 ```
 
 完整报错见第一行（`docker compose logs --no-color go-messager | head -5`）。处理方式任选其一：
@@ -63,8 +63,12 @@ main.main()
    ```bash
    # 查询镜像内 app 用户的 uid/gid
    docker compose run --rm --entrypoint id go-messager app
-   # 按上面的 uid/gid 改属主，例如都是 100
+   # 按上面的 uid/gid 改属主，例如 uid/gid 都是 100
    sudo chown -R 100:100 /data/go_messager/data
+
+   # 不想手动查 uid 时，也可以直接用镜像里的 app 用户改（效果一样）
+   docker compose run --rm --user 0 --entrypoint chown go-messager -R app:app /data
+
    docker compose up -d --force-recreate go-messager
    ```
 
@@ -73,6 +77,10 @@ main.main()
 3. 临时以 root 运行：在 compose 里加 `user: "0:0"`（不推荐，容器进程会以 root 身份写宿主目录）。
 
 > 从旧版本（以 root 运行）升级到当前版本时，`/data/data.db` 可能仍是 `root:root`，同样需要执行上面的 chown。
+
+> chown 之后仍然 `permission denied`：先看宿主是否开着 SELinux（`getenforce` 返回 `Enforcing`）。
+> 这种情况要给 bind mount 打容器标签：`sudo chcon -Rt container_file_t /data/go_messager`，
+> 或者把 compose 里的挂载写成 `/data/go_messager/data:/data:z`（Docker 会在启动时自动递归改标签，目录大时首次启动会慢一点）。
 
 ## 镜像构建
 
@@ -84,11 +92,12 @@ docker build -t go-messager:local .
 
 Dockerfile 没有使用 `# syntax=docker/dockerfile:1`，避免构建开始前还要从 docker.io 拉取 dockerfile frontend；自带 frontend（Docker 20.10+ / BuildKit 0.8+）已支持 `RUN --mount=type=cache`。
 
-CI 构建时 docker.io 通常不可达，而 buildx 的 `docker-container` builder 不会继承 runner 上 dockerd 的 `registry-mirrors`。因此 workflow 会：
+CI 不创建独立的 BuildKit 容器，也不使用 QEMU：直接调用 runner 上 Docker 引擎自带的 builder（`docker` driver），**只构建 runner 本机架构**（amd64 runner 产出 amd64 镜像）。链路更短，也不会再遇到自建 builder 里旧版 BuildKit 的会话/推送问题。
+
+基础镜像仍走镜像加速，workflow 会：
 
 1. 依次探测 `DOCKER_MIRRORS` 里的镜像站（`curl https://<mirror>/v2/` 返回 200/401 视为可用）；
-2. 把基础镜像直接改写成该镜像站的完整地址（如 `47k76iq5.mirror.aliyuncs.com/library/node:24-alpine`），BuildKit 因此完全不需要访问 docker.io；
-3. 同时把可用镜像站写进 `.buildx/buildkitd.toml`，通过 `setup-buildx-action` 的 `config` 注入，作为兜底。
+2. 把可用镜像站拼进基础镜像地址（如 `docker.1ms.run/library/node:24-alpine`），docker.io 不可达时也能拉到。
 
 构建日志会打印每个镜像站的探测结果和最终使用的基础镜像名，便于排查。本地访问不了 docker.io 时，也可以手动指定基础镜像：
 
@@ -110,7 +119,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 
 | 变量             | 默认值                                                                    | 说明                                                                                   |
 | ---------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `DOCKER_MIRRORS` | `docker.1ms.run`                                                          | docker.io 镜像加速地址，逗号分隔；按顺序探测，第一个可用的用于改写基础镜像并写入 buildkitd.toml |
+| `DOCKER_MIRRORS` | `docker.1ms.run`                                                          | docker.io 镜像加速地址，逗号分隔；按顺序探测，第一个可用的用于改写基础镜像地址 |
 | `NODE_IMAGE`     | 留空                                                                      | 显式设置时原样使用；留空则自动拼成 `<mirror>/library/node:24-alpine`，无可用镜像站时用 `node:24-alpine` |
 | `GO_IMAGE`       | 留空                                                                      | 同上，默认为 `golang:1.27-alpine`                                                       |
 | `RUNTIME_IMAGE`  | 留空                                                                      | 同上，默认为 `alpine:3.22`                                                              |
@@ -118,7 +127,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 | `DOCKER_CACHE_TYPE` | `registry`                                                             | Docker 层缓存后端：`registry`（缓存推到镜像仓库标签）或 `gha`（走 Actions 缓存 API）      |
 | `DOCKER_CACHE_REF`  | `buildcache`                                                           | `registry` 模式下的缓存标签名（`<镜像>:buildcache`），`gha` 模式下的缓存作用域            |
 
-> 注意：`DOCKER_MIRRORS` 默认第一项就是当前 runner 上 dockerd 正在使用的阿里云加速地址；换机器部署时请改成自己环境里可用的地址（置空则不做探测、直接使用 docker.io）。
+> 注意：`DOCKER_MIRRORS` 默认 `docker.1ms.run`，可覆盖成逗号分隔的多个地址；换机器部署时请改成自己环境里可用的地址（置空则不做探测、直接使用 docker.io）。
 
 ### CI 缓存
 
@@ -128,7 +137,9 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 | --- | --- | --- | --- |
 | Go 依赖 + 编译产物 | `actions/setup-go` 内置缓存（`GOMODCACHE` + `GOCACHE`） | `go.sum` | 日志出现 `Cache restored from key: setup-go-...` |
 | 前端依赖 | `pnpm/setup` 缓存 pnpm store | `template/pnpm-lock.yaml` | 日志出现 `Cache restored from key: ...`，`pnpm install` 走 `--prefer-offline` |
-| Docker 构建层 | buildx 缓存，默认推到 `<镜像>:buildcache` 标签（`mode=max`） | 每条指令 + 构建上下文哈希 | 构建输出里耗时步骤显示 `CACHED` |
+| Docker 构建层 | registry 缓存（`docker` driver 导出），推到 `<镜像>:buildcache` 标签（`mode=max`） | 每条指令 + 构建上下文哈希 | 构建输出里耗时步骤显示 `CACHED` |
+
+> Docker 层缓存由 `docker` driver 导出到 registry，需要 Docker 引擎启用 containerd 镜像存储（`docker info` 里能看到 `driver-type: io.containerd.snapshotter.v1`，当前 runner 已满足）。若某台 runner 不满足，删掉工作流里的 `cache-from` / `cache-to`，退回 daemon 自身的本地缓存即可。
 
 几个排查用的命令（在 workflow 里也打印了这些信息）：
 

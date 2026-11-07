@@ -3,7 +3,6 @@
 .gitignore
 .github
 .gitea
-.buildx
 
 # 本地数据库与编译产物
 *.db

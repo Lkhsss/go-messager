@@ -34,9 +34,7 @@ env:
   REGISTRY: ${{ vars.REGISTRY || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || format('ghcr.io/{0}', github.repository) }}
   REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME || github.actor }}
-  # 多架构平台；只构建 amd64 可设为 linux/amd64
-  # PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64,linux/arm64' }}
-  PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64' }}
+  # 只使用 runner 本机架构构建（不做跨架构，因此不需要 QEMU）
   # Docker 构建层缓存的后端：
   #   registry（默认）—— 缓存推到镜像仓库的独立标签，Gitea / GHCR / 自建 registry 都能用
   #   gha            —— 走 Actions 缓存 API，需要 runner 提供缓存服务（见 README「CI 缓存」）
@@ -49,9 +47,7 @@ env:
   # 前端依赖镜像源（npm / pnpm），默认走 npmmirror；
   # 换官方源就设 vars.NPM_REGISTRY=https://registry.npmjs.org
   NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
-  # docker.io 镜像加速地址（英文逗号分隔），CI 会依次探测，选中第一个可用的：
-  #   ① 把基础镜像改写成该镜像站的地址（不依赖 BuildKit 是否读取 buildkitd.toml）
-  #   ② 同时写进 buildkitd.toml 作为兜底
+  # docker.io 镜像加速地址（英文逗号分隔）：CI 依次探测，第一个可用的用于改写基础镜像地址
   # 默认只用 docker.1ms.run；可覆盖成多个地址（如 a.example,b.example）按顺序探测。
   DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run' }}
   # 基础镜像；留空则由探测到的镜像站自动拼装（如 <mirror>/library/node:24-alpine），
@@ -140,17 +136,12 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v7
 
-      - name: 设置 QEMU（多架构构建）
-        uses: docker/setup-qemu-action@v4
-
-      - name: 探测 docker.io 镜像加速并生成 BuildKit 配置
+      - name: 探测 docker.io 镜像加速
         id: mirror
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .buildx
           prefix=""
-          reachable=()
           if [[ -n "${DOCKER_MIRRORS:-}" ]]; then
             IFS=',' read -ra list <<< "${DOCKER_MIRRORS}"
             for mirror in "${list[@]}"; do
@@ -161,24 +152,11 @@ jobs:
               code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' "https://${mirror}/v2/" || true)"
               echo "镜像站 ${mirror}/v2/ -> HTTP ${code:-连接失败}"
               if [[ "${code}" == "200" || "${code}" == "401" ]]; then
-                reachable+=("${mirror}")
-                if [[ -z "${prefix}" ]]; then
-                  prefix="${mirror}/library/"
-                fi
+                prefix="${mirror}/library/"
+                break
               fi
             done
           fi
-
-          {
-            echo "# 由 CI 自动生成：docker.io 镜像加速（可用仓库变量 DOCKER_MIRRORS 覆盖）"
-            if [[ "${#reachable[@]}" -gt 0 ]]; then
-              mirrors_toml=""
-              for mirror in "${reachable[@]}"; do
-                mirrors_toml="${mirrors_toml:+${mirrors_toml}, }\"${mirror}\""
-              done
-              printf '[registry."docker.io"]\n  mirrors = [%s]\n' "${mirrors_toml}"
-            fi
-          } > .buildx/buildkitd.toml
 
           node_image="${NODE_IMAGE:-${prefix}node:24-alpine}"
           go_image="${GO_IMAGE:-${prefix}golang:1.27-alpine}"
@@ -189,18 +167,10 @@ jobs:
             echo "runtime_image=${runtime_image}"
           } >> "${GITHUB_OUTPUT}"
 
-          echo "BuildKit 配置："
-          cat .buildx/buildkitd.toml
-          echo "构建使用的基础镜像："
+          echo "构建使用的基础镜像（按 runner 本机架构构建）："
           echo "  NODE_IMAGE=${node_image}"
           echo "  GO_IMAGE=${go_image}"
           echo "  RUNTIME_IMAGE=${runtime_image}"
-
-      - name: 设置 Buildx
-        uses: docker/setup-buildx-action@v4
-        with:
-          # 让 BuildKit 自己拉取基础镜像时也走上面的镜像加速配置
-          config: .buildx/buildkitd.toml
 
       - name: 登录镜像仓库
         uses: docker/login-action@v4
@@ -225,7 +195,7 @@ jobs:
             org.opencontainers.image.description=Go 语言论坛
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
 
-      - name: 计算 BuildKit 缓存配置
+      - name: 计算构建缓存配置
         id: cache
         shell: bash
         run: |
@@ -250,7 +220,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: ${{ env.PLATFORMS }}
+          # 不指定 platforms：直接用 runner 上 Docker 引擎自带的 builder 构建本机架构
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -262,8 +232,6 @@ jobs:
             GO_IMAGE=${{ steps.mirror.outputs.go_image }}
             RUNTIME_IMAGE=${{ steps.mirror.outputs.runtime_image }}
           pull: true
-          # 部分自建 registry 不支持 OCI attestation，关闭 provenance 以保证兼容
-          provenance: false
           # mode=max：连未被最终镜像引用的中间层（如 pnpm install、go mod download）
           # 也一起导出，Dockerfile 里这些耗时步骤下次才能直接命中
           cache-from: ${{ steps.cache.outputs.from }}
