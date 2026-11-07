@@ -8,6 +8,8 @@
 #   --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine
 #   --build-arg GO_IMAGE=docker.1ms.run/library/golang:1.27-alpine
 #   --build-arg RUNTIME_IMAGE=docker.1ms.run/library/alpine:3.22
+# npm / pnpm 依赖源默认 npmmirror，可用 build-arg 覆盖：
+#   --build-arg NPM_REGISTRY=https://registry.npmjs.org
 ARG NODE_IMAGE=node:24-alpine
 ARG GO_IMAGE=golang:1.27-alpine
 ARG RUNTIME_IMAGE=alpine:3.22
@@ -19,16 +21,25 @@ ARG RUNTIME_IMAGE=alpine:3.22
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 
 ARG PNPM_VERSION=11
+# npm / pnpm 的镜像源：默认走 npmmirror，需要官方源时
+#   --build-arg NPM_REGISTRY=https://registry.npmjs.org
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+# npm 读 npm_config_registry，pnpm 11+ 读 pnpm_config_registry，两个都设上；
+# 下面的 pnpm install 还会再用 --registry 显式指定，保证不被基础镜像里的 .npmrc 覆盖
+ENV npm_config_registry=${NPM_REGISTRY} \
+    pnpm_config_registry=${NPM_REGISTRY}
 
 WORKDIR /src/template
 
 # 不依赖 corepack（Node 24 之后 corepack 行为有变化），直接装指定大版本的 pnpm
-RUN npm install --global pnpm@${PNPM_VERSION}
+# 缓存 npm 的下载目录：本地重复构建或 registry 层缓存未命中时少一次网络往返
+RUN --mount=type=cache,id=npm,target=/root/.npm \
+    npm install --global pnpm@${PNPM_VERSION}
 
 # 先拷贝清单文件，依赖不变时可以命中缓存
 COPY template/package.json template/pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm-store \
-    pnpm install --frozen-lockfile --store-dir=/pnpm-store
+    pnpm install --frozen-lockfile --prefer-offline --registry=${NPM_REGISTRY} --store-dir=/pnpm-store
 
 COPY template/ ./
 RUN pnpm run build

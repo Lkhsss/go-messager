@@ -37,13 +37,22 @@ env:
   # 多架构平台；只构建 amd64 可设为 linux/amd64
   # PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64,linux/arm64' }}
   PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64' }}
+  # Docker 构建层缓存的后端：
+  #   registry（默认）—— 缓存推到镜像仓库的独立标签，Gitea / GHCR / 自建 registry 都能用
+  #   gha            —— 走 Actions 缓存 API，需要 runner 提供缓存服务（见 README「CI 缓存」）
+  DOCKER_CACHE_TYPE: ${{ vars.DOCKER_CACHE_TYPE || 'registry' }}
+  # registry 模式下是缓存标签名（<镜像>:<值>），gha 模式下是缓存作用域名
+  DOCKER_CACHE_REF: ${{ vars.DOCKER_CACHE_REF || 'buildcache' }}
   # 国内 Go 模块代理与校验数据库；可在仓库 Variables 中覆盖
   GOPROXY: ${{ vars.GOPROXY || 'https://goproxy.cn,direct' }}
   GOSUMDB: ${{ vars.GOSUMDB || 'sum.golang.google.cn' }}
+  # 前端依赖镜像源（npm / pnpm），默认走 npmmirror；
+  # 换官方源就设 vars.NPM_REGISTRY=https://registry.npmjs.org
+  NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
   # docker.io 镜像加速地址（英文逗号分隔），CI 会依次探测，选中第一个可用的：
   #   ① 把基础镜像改写成该镜像站的地址（不依赖 BuildKit 是否读取 buildkitd.toml）
   #   ② 同时写进 buildkitd.toml 作为兜底
-  # 默认第一项是当前 runner 上 dockerd 正在使用的阿里云加速地址，可按需覆盖。
+  # 默认只用 docker.1ms.run；可覆盖成多个地址（如 a.example,b.example）按顺序探测。
   DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run' }}
   # 基础镜像；留空则由探测到的镜像站自动拼装（如 <mirror>/library/node:24-alpine），
   # 显式设置时（如 vars.NODE_IMAGE=node:24-alpine）原样使用
@@ -73,12 +82,20 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # 开启内置缓存：同时缓存 GOMODCACHE（依赖）与 GOCACHE（编译产物）
           cache: true
+          # 用 go.sum 参与缓存 key，避免 go.mod 未变但校验/间接依赖变化时误命中
+          cache-dependency-path: go.sum
           # 仅加速 Go 工具链下载；模块下载由 GOPROXY 控制
           go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
 
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
+        env:
+          # 这个 action 会从 npm registry 下载 pnpm 本体，这两个前缀一起给上：
+          # npm 读 npm_config_registry，pnpm 11+ 读 pnpm_config_registry
+          npm_config_registry: ${{ env.NPM_REGISTRY }}
+          pnpm_config_registry: ${{ env.NPM_REGISTRY }}
         with:
           version: 11
           runtime: node@24
@@ -87,9 +104,26 @@ jobs:
           cache-dependency-path: template/pnpm-lock.yaml
           install: false
 
+      - name: 显示缓存目录（便于确认缓存是否命中）
+        shell: bash
+        run: |
+          echo "NPM_REGISTRY=${NPM_REGISTRY}"
+          echo "GOMODCACHE=$(go env GOMODCACHE)"
+          echo "GOCACHE=$(go env GOCACHE)"
+          du -sh "$(go env GOMODCACHE)" "$(go env GOCACHE)" 2>/dev/null || true
+          store="$(cd template && pnpm store path)"
+          echo "PNPM_STORE=${store}"
+          du -sh "${store}" 2>/dev/null || true
+
       - name: 安装前端依赖
         working-directory: template
-        run: pnpm install --frozen-lockfile
+        env:
+          # npm 读 npm_config_registry，pnpm 11+ 读 pnpm_config_registry；
+          # 下面再用 --registry 显式指定，避免本地 .npmrc 覆盖镜像源
+          npm_config_registry: ${{ env.NPM_REGISTRY }}
+          pnpm_config_registry: ${{ env.NPM_REGISTRY }}
+        # --prefer-offline：缓存命中时不再向 registry 校验，冷缓存会自动回退到联网下载
+        run: pnpm install --frozen-lockfile --prefer-offline --registry "${NPM_REGISTRY}"
 
       - name: 构建前端（含类型检查）
         working-directory: template
@@ -191,6 +225,26 @@ jobs:
             org.opencontainers.image.description=Go 语言论坛
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
 
+      - name: 计算 BuildKit 缓存配置
+        id: cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          # registry：缓存是可拉取的镜像标签，跨 runner、跨机器都能命中
+          # gha：缓存存到 Actions 缓存服务，省一个 tag，但要求 runner 提供缓存服务
+          if [[ "${DOCKER_CACHE_TYPE}" == "gha" ]]; then
+            from="type=gha,scope=${DOCKER_CACHE_REF}"
+            to="type=gha,scope=${DOCKER_CACHE_REF},mode=max"
+          else
+            ref="${IMAGE_NAME}:${DOCKER_CACHE_REF}"
+            from="type=registry,ref=${ref}"
+            to="type=registry,ref=${ref},mode=max"
+          fi
+          echo "from=${from}" >> "${GITHUB_OUTPUT}"
+          echo "to=${to}" >> "${GITHUB_OUTPUT}"
+          echo "cache-from: ${from}"
+          echo "cache-to: ${to}"
+
       - name: 构建并推送
         uses: docker/build-push-action@v7
         with:
@@ -203,12 +257,14 @@ jobs:
           build-args: |
             GOPROXY=${{ env.GOPROXY }}
             GOSUMDB=${{ env.GOSUMDB }}
+            NPM_REGISTRY=${{ env.NPM_REGISTRY }}
             NODE_IMAGE=${{ steps.mirror.outputs.node_image }}
             GO_IMAGE=${{ steps.mirror.outputs.go_image }}
             RUNTIME_IMAGE=${{ steps.mirror.outputs.runtime_image }}
           pull: true
           # 部分自建 registry 不支持 OCI attestation，关闭 provenance 以保证兼容
           provenance: false
-          # 用镜像仓库保存 BuildKit 缓存，GitHub / Gitea / Docker Hub 都可用
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # mode=max：连未被最终镜像引用的中间层（如 pnpm install、go mod download）
+          # 也一起导出，Dockerfile 里这些耗时步骤下次才能直接命中
+          cache-from: ${{ steps.cache.outputs.from }}
+          cache-to: ${{ steps.cache.outputs.to }}

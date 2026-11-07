@@ -100,16 +100,105 @@ docker build \
   -t go-messager:local .
 ```
 
+npm / pnpm 的依赖默认走 `https://registry.npmmirror.com`（Dockerfile 里的 `ARG NPM_REGISTRY`），需要官方源或私有源时：
+
+```bash
+docker build --build-arg NPM_REGISTRY=https://registry.npmjs.org -t go-messager:local .
+```
+
 CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 
 | 变量             | 默认值                                                                    | 说明                                                                                   |
 | ---------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `DOCKER_MIRRORS` | `47k76iq5.mirror.aliyuncs.com,docker.1ms.run,docker.1panel.live`          | docker.io 镜像加速地址，逗号分隔；按顺序探测，第一个可用的用于改写基础镜像并写入 buildkitd.toml |
+| `DOCKER_MIRRORS` | `docker.1ms.run`                                                          | docker.io 镜像加速地址，逗号分隔；按顺序探测，第一个可用的用于改写基础镜像并写入 buildkitd.toml |
 | `NODE_IMAGE`     | 留空                                                                      | 显式设置时原样使用；留空则自动拼成 `<mirror>/library/node:24-alpine`，无可用镜像站时用 `node:24-alpine` |
 | `GO_IMAGE`       | 留空                                                                      | 同上，默认为 `golang:1.27-alpine`                                                       |
 | `RUNTIME_IMAGE`  | 留空                                                                      | 同上，默认为 `alpine:3.22`                                                              |
+| `NPM_REGISTRY`   | `https://registry.npmmirror.com`                                          | npm / pnpm 依赖镜像源，同时用于 CI 安装依赖和镜像构建中的 pnpm 安装                       |
+| `DOCKER_CACHE_TYPE` | `registry`                                                             | Docker 层缓存后端：`registry`（缓存推到镜像仓库标签）或 `gha`（走 Actions 缓存 API）      |
+| `DOCKER_CACHE_REF`  | `buildcache`                                                           | `registry` 模式下的缓存标签名（`<镜像>:buildcache`），`gha` 模式下的缓存作用域            |
 
 > 注意：`DOCKER_MIRRORS` 默认第一项就是当前 runner 上 dockerd 正在使用的阿里云加速地址；换机器部署时请改成自己环境里可用的地址（置空则不做探测、直接使用 docker.io）。
+
+### CI 缓存
+
+`.gitea/workflows/Build-Docker.yml` 里一共用了三层缓存，缓存 key 都由锁文件的哈希决定：
+
+| 缓存 | 存放位置 | key 依据 | 命中后的表现 |
+| --- | --- | --- | --- |
+| Go 依赖 + 编译产物 | `actions/setup-go` 内置缓存（`GOMODCACHE` + `GOCACHE`） | `go.sum` | 日志出现 `Cache restored from key: setup-go-...` |
+| 前端依赖 | `pnpm/setup` 缓存 pnpm store | `template/pnpm-lock.yaml` | 日志出现 `Cache restored from key: ...`，`pnpm install` 走 `--prefer-offline` |
+| Docker 构建层 | buildx 缓存，默认推到 `<镜像>:buildcache` 标签（`mode=max`） | 每条指令 + 构建上下文哈希 | 构建输出里耗时步骤显示 `CACHED` |
+
+几个排查用的命令（在 workflow 里也打印了这些信息）：
+
+```bash
+go env GOMODCACHE GOCACHE      # Go 两层缓存目录
+( cd template && pnpm store path )   # pnpm store 目录
+docker buildx imagetools inspect <镜像>:buildcache   # 查看 Docker 层缓存是否已推送
+```
+
+依赖源由 `NPM_REGISTRY` 控制（默认 `https://registry.npmmirror.com`）。`pnpm-lock.yaml` 只记录 integrity 哈希、不含 registry 地址，
+所以换镜像源不会让 `--frozen-lockfile` 失败；cache key 也不受影响，换源后首次仍可复用已有 store。
+
+强制刷新缓存：改 `go.sum` / `pnpm-lock.yaml` 会自然换 key；Docker 层缓存想重来，换一个 `DOCKER_CACHE_REF`（如 `buildcache2`）或删掉仓库里对应的 `buildcache` 标签即可。
+
+### 在 Gitea 上启用 Actions 缓存
+
+上面 Go / pnpm 的缓存都走 Actions 的缓存 API（`actions/cache` 那套），**服务端在 runner 侧，不是仓库文件能决定的**。
+老版本 `act_runner` 不提供缓存服务，此时日志里只有 `Cache service url not found`，缓存静默失效但不会让构建失败；
+新版 `gitea-runner` 自带缓存服务（cache service v2，同时兼容 `actions/upload-artifact` / `download-artifact` v4）。
+
+单 runner：在 runner 的 `config.yaml`（可用 `./gitea-runner config init` 生成模板）里打开本地缓存目录，并把它持久化：
+
+```yaml
+cache:
+  dir: /data/actcache        # 容器部署时把该目录挂成 volume，重建 runner 不丢缓存
+  # retention: 168h          # 未使用缓存的保留时长，默认 168h
+  # repo_size_limit: 10GB    # 单仓库缓存上限，默认 10GB，超出按最近最少使用淘汰
+```
+
+多 runner 共享缓存：把其中一个跑成 cache-server，其余指向它（`external_secret` 用 `openssl rand -hex 32` 生成，两边保持一致）：
+
+```yaml
+# cache-server.yaml
+cache:
+  dir: /data/actcache
+  port: 8088
+  external_secret: "<secret>"
+```
+
+```bash
+gitea-runner -c cache-server.yaml cache-server
+```
+
+```yaml
+# 其余 runner 的 config.yaml
+cache:
+  external_server: "http://<cache-server-host>:8088/"
+  external_secret: "<secret>"
+```
+
+也可以让 runner 直接用 S3 / MinIO 存缓存（无需 cache-server）：
+
+```yaml
+cache:
+  s3:
+    endpoint: "http://minio:9000"
+    region: "us-east-1"
+    bucket: "runner-cache"
+    prefix: "gitea-runner-cache"
+    path_style: true
+    access_key_file: "/run/secrets/cache-s3-access-key"
+    secret_key_file: "/run/secrets/cache-s3-secret-key"
+```
+
+> S3 的过期清理不走 `cache.retention`，需要在桶上配生命周期规则，并让未完成的分片上传自动中止。
+
+注意：缓存服务是 runner 侧的一个 HTTP 服务，**job 容器必须能访问到它**。同理，如果把 Docker 层缓存切到 `gha`
+（`DOCKER_CACHE_TYPE=gha`），buildx 的构建容器也要能访问该地址；网络不通时保持默认的 `registry` 模式即可。
+
+验证方式：连续重跑两次 workflow，第二次日志里出现 `Cache restored from key`，且依赖安装/编译耗时明显下降。
 
 # TODO
 
