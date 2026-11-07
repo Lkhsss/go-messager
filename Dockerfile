@@ -28,6 +28,12 @@ FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend
 
 ARG TARGETOS=linux
 ARG TARGETARCH
+# 可通过 --build-arg 覆盖为国内代理，例如 https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
+ARG GOSUMDB=sum.golang.org
+
+ENV GOPROXY=${GOPROXY} \
+    GOSUMDB=${GOSUMDB}
 
 WORKDIR /src
 

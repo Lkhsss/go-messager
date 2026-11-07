@@ -37,6 +37,9 @@ env:
   # 多架构平台；只构建 amd64 可设为 linux/amd64
   # PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64,linux/arm64' }}
   PLATFORMS: ${{ vars.PLATFORMS || 'linux/amd64' }}
+  # 国内 Go 模块代理与校验数据库；可在仓库 Variables 中覆盖
+  GOPROXY: ${{ vars.GOPROXY || 'https://goproxy.cn,direct' }}
+  GOSUMDB: ${{ vars.GOSUMDB || 'sum.golang.google.cn' }}
 
 jobs:
   test:
@@ -61,6 +64,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # 仅加速 Go 工具链下载；模块下载由 GOPROXY 控制
+          go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
 
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
@@ -129,6 +134,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GOPROXY=${{ env.GOPROXY }}
+            GOSUMDB=${{ env.GOSUMDB }}
           pull: true
           # 部分自建 registry 不支持 OCI attestation，关闭 provenance 以保证兼容
           provenance: false
