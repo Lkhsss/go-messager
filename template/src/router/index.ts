@@ -6,6 +6,7 @@ import SetupView from "@/views/SetupView.vue";
 import PostCreateView from "@/views/PostCreateView.vue";
 import MyPostsView from "@/views/MyPostsView.vue";
 import DataView from "@/views/DataView.vue";
+import LeaderboardView from "@/views/LeaderboardView.vue";
 import PostDetailView from "@/views/PostDetailView.vue";
 import AdminView from "@/views/AdminView.vue";
 import { useAuthStore } from "@/stores/auth";
@@ -70,6 +71,12 @@ const router = createRouter({
       path: "/post/:id/edit",
       name: "post-edit",
       component: PostCreateView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/leaderboard",
+      name: "leaderboard",
+      component: LeaderboardView,
       meta: { requiresAuth: true },
     },
     {
@@ -138,6 +145,7 @@ router.beforeEach(async (to) => {
 });
 
 export default router;
+
 
 
 

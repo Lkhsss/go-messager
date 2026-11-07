@@ -39,6 +39,13 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	admin.PUT("/tag/:id", data.UpdateTag)
 	admin.DELETE("/tag/:id", data.DeleteTag)
 
+	// 用户管理
+	admin.GET("/admin/users", data.GetAdminUsers)
+	admin.GET("/admin/users/:id", data.GetAdminUserDetail)
+	admin.PATCH("/admin/users/:id/status", data.SetAdminUserStatus)
+	admin.PUT("/admin/users/:id/password", data.SetAdminUserPassword)
+	admin.DELETE("/admin/users/:id", data.DeleteAdminUser)
+
 	authed.GET("/me/posts", data.GetMyPosts)
 	authed.PUT("/post/:id", data.UpdatePost)
 	authed.DELETE("/post/:id", data.DeletePost)
@@ -47,5 +54,6 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	authed.POST("/post/:id/comments", data.CreateComment)
 	authed.GET("/me/stats", data.GetMyStats)
 	admin.GET("/admin/stats", data.GetAdminStats)
+	authed.GET("/leaderboard", data.GetLeaderboard)
 	return nil
 }

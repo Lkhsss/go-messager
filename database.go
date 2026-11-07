@@ -108,7 +108,8 @@ func (d *Data) GetUserByID(id uint) (User, error) {
 
 func (d *Data) IfUserExist(name string) (bool, error) {
 	var count int64
-	err := d.DB.Model(&User{}).Where("name = ?", name).Count(&count).Error
+	// 包含已软删除账号：删除账号后保留其文章，用户名也不能被新账号复用。
+	err := d.DB.Unscoped().Model(&User{}).Where("name = ?", name).Count(&count).Error
 	if err != nil {
 		return false, fmt.Errorf("查询用户名[%w]错误", err)
 	}

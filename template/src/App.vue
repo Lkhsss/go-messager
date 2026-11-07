@@ -6,6 +6,7 @@ import SidebarToggleClose from './components/icons/SidebarToggleClose.vue';
 import HomeIcon from './components/icons/HomeIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import UserAvatar from './components/UserAvatar.vue';
+import SiteFooter from './components/SiteFooter.vue';
 import { useAuthStore } from './stores/auth';
 
 const sidebarOpen = ref(false)
@@ -28,7 +29,7 @@ async function logout() {
   <RouterView v-if="route.meta.layout === 'blank'" />
   <div v-else class="drawer lg:drawer-open">
     <input id="my-drawer-4" v-model="sidebarOpen" type="checkbox" class="drawer-toggle inline" />
-    <div class="drawer-content">
+    <div class="drawer-content flex min-h-screen flex-col">
       <!-- Navbar -->
       <nav class="navbar w-full bg-base-300">
         <button type="button" :aria-label="sidebarOpen ? 'close sidebar' : 'open sidebar'" aria-controls="my-drawer-4"
@@ -52,7 +53,10 @@ async function logout() {
         </div>
       </nav>
       <!-- Page content here -->
-      <RouterView />
+      <div class="flex-1">
+        <RouterView />
+      </div>
+      <SiteFooter />
     </div>
 
     <div class="drawer-side is-drawer-close:overflow-visible">
@@ -96,6 +100,18 @@ async function logout() {
               <span class="is-drawer-close:hidden">我的文章</span>
             </router-link>
           </li>
+          <!-- 排行榜 -->
+          <li>
+            <router-link to="/leaderboard" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip="排行榜">
+              <svg aria-label="排行榜" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 21h8m-4-4v4m-6-9a3 3 0 01-3-3V5h4v4a3 3 0 01-3 3zm12 0a3 3 0 01-3-3V5h4v4a3 3 0 01-3 3zM6 5h12v4a6 6 0 01-12 0V5z" />
+              </svg>
+              <span class="is-drawer-close:hidden">排行榜</span>
+            </router-link>
+          </li>
           <!-- 数据 -->
           <li>
             <router-link to="/data" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
@@ -136,5 +152,6 @@ async function logout() {
     </div>
   </div>
 </template>
+
 
 

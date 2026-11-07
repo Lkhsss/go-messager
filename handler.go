@@ -28,9 +28,14 @@ func UptimeSeconds() int64 {
 
 // Uptime 运行时长 GET /api/uptime
 func (d *Data) Uptime(c *gin.Context) {
-	Response{}.Ok(c, http.StatusOK, gin.H{
+	payload := gin.H{
 		"uptime_seconds": UptimeSeconds(),
-	})
+	}
+	// 启动时刻用于前端计算“X年/X月/X日”；未调用 StartTimer 时不返回该字段。
+	if !startTime.IsZero() {
+		payload["started_at"] = startTime
+	}
+	Response{}.Ok(c, http.StatusOK, payload)
 }
 
 // Status 系统状态 GET /api/status

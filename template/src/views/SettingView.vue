@@ -79,7 +79,6 @@ async function removeAvatar() {
   <main class="mx-auto w-full max-w-4xl p-4 sm:p-6 lg:p-8">
     <header class="flex items-end justify-between gap-4">
       <div>
-        <p class="text-[0.65rem] font-medium uppercase tracking-[0.3em] text-base-content/40">Account</p>
         <h1 class="mt-1 text-2xl font-semibold lg:text-3xl">设置</h1>
       </div>
       <span v-if="auth.isAdmin" class="badge badge-primary badge-sm">管理员</span>
@@ -136,7 +135,7 @@ async function removeAvatar() {
           <div class="card-body gap-4">
             <div class="flex items-center justify-between gap-2">
               <h2 class="card-title text-lg">我获得的反应</h2>
-              <span class="text-xs text-base-content/40">来自发布的文章</span>
+
             </div>
 
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -159,4 +158,6 @@ async function removeAvatar() {
     </div>
   </main>
 </template>
+
+
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   EMOJI_REACTIONS,
   PRIMARY_REACTIONS,
@@ -34,6 +34,10 @@ function count(type: ReactionType): number {
   return reactionCount(props.reactions, type)
 }
 
+// 点击数大于 1 的额外表情直接展示在问号后面，方便新用户直接点击
+const visibleEmojiReactions = computed(() =>
+  EMOJI_REACTIONS.filter((option) => count(option.type) > 1),
+)
 function onReact(type: ReactionType) {
   if (props.busy) return
   emit('react', type)
@@ -59,6 +63,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
       :title="isActive(option.type) ? `${option.label}（再次点击取消）` : option.label" @click="onReact(option.type)">
       <span class="text-base leading-none">{{ option.emoji }}</span>
       <span v-if="count(option.type) > 0" class="text-xs">{{ count(option.type) }}</span>
+    </button>
+
+    <button v-for="option in visibleEmojiReactions" :key="`visible-${option.type}`" type="button" class="reaction-chip"
+      :class="{ 'reaction-chip--active': isActive(option.type) }" :disabled="busy"
+      :aria-pressed="isActive(option.type)"
+      :title="isActive(option.type) ? `${option.label}（再次点击取消）` : option.label" @click="onReact(option.type)">
+      <span class="text-base leading-none">{{ option.emoji }}</span>
+      <span class="text-xs">{{ count(option.type) }}</span>
     </button>
 
     <div ref="pickerRoot" class="relative">
@@ -116,3 +128,4 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
   cursor: not-allowed;
 }
 </style>
+

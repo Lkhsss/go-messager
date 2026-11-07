@@ -6,8 +6,8 @@ Go语言制作的论坛
 
 1. [x] 卡片悬浮
 2. [ ] text-rotate
-3. [ ] countdown
-4. [ ] 排行(问号)榜
+3. [x] countdown
+4. [x] 排行(问号)榜
 5. [x] emoji和表情
 6. [x] Markdown支持
 7. [x] 个人帖子界面

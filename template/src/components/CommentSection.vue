@@ -141,8 +141,8 @@ onMounted(() => {
       <form class="space-y-2" @submit.prevent="submitComment">
         <textarea v-model="body" rows="4" class="textarea textarea-bordered w-full text-sm"
           placeholder="写下你的评论，支持 Markdown…" :disabled="submitting"></textarea>
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-xs text-base-content/45">评论也可以收到点赞和表情反应</span>
+        <div class="flex justify-end gap-2">
+
           <button type="submit" class="btn btn-primary btn-sm" :disabled="submitting">
             <span v-if="submitting" class="loading loading-spinner loading-sm"></span>
             发表评论
@@ -196,5 +196,7 @@ onMounted(() => {
     </dialog>
   </section>
 </template>
+
+
 
 

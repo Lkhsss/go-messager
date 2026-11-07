@@ -63,10 +63,23 @@ func (d *Data) GetMyStats(c *gin.Context) {
 		return
 	}
 
-	var posts []Post
-	if err := d.DB.Select("char_count", "like_count", "dislike_count", "question_count").Where("user = ? AND root_id IS NULL", user.Name).Find(&posts).Error; err != nil {
+	stats, err := d.loadUserStats(user.Name)
+	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
 		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, stats)
+}
+
+// loadUserStats 按用户名统计文章/互动数据。
+// 个人数据页与管理员用户详情共用，确保两处数字一致。
+func (d *Data) loadUserStats(name string) (UserStatsResponse, error) {
+	var posts []Post
+	if err := d.DB.Select("char_count", "like_count", "dislike_count", "question_count").
+		Where("user = ? AND root_id IS NULL", name).
+		Find(&posts).Error; err != nil {
+		return UserStatsResponse{}, err
 	}
 
 	stats := UserStatsResponse{PostCount: int64(len(posts))}
@@ -77,21 +90,21 @@ func (d *Data) GetMyStats(c *gin.Context) {
 		stats.Question += post.QuestionCount
 	}
 
-	if err := d.DB.Model(&Post{}).Where("user = ? AND root_id IS NOT NULL", user.Name).Count(&stats.CommentCount).Error; err != nil {
-		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
-		return
+	if err := d.DB.Model(&Post{}).
+		Where("user = ? AND root_id IS NOT NULL", name).
+		Count(&stats.CommentCount).Error; err != nil {
+		return UserStatsResponse{}, err
 	}
 
 	if err := d.DB.Raw(`
 SELECT COUNT(*) FROM posts c
 JOIN posts r ON r.id = c.root_id AND r.deleted_at IS NULL
 WHERE c.deleted_at IS NULL AND c.root_id IS NOT NULL AND r.user = ?
-`, user.Name).Scan(&stats.ReceivedCommentCount).Error; err != nil {
-		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
-		return
+`, name).Scan(&stats.ReceivedCommentCount).Error; err != nil {
+		return UserStatsResponse{}, err
 	}
 
-	Response{}.Ok(c, http.StatusOK, stats)
+	return stats, nil
 }
 
 // countTextCharacters 按 Unicode 字符计数，忽略空白字符。

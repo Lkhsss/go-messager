@@ -3,6 +3,9 @@ import { onMounted, ref } from 'vue'
 import { createTag, deleteTag, fetchTags, updateTag, type TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
+
+const activeTab = ref<'tags' | 'users'>('tags')
 
 const tags = ref<TagItem[]>([])
 const name = ref('')
@@ -208,13 +211,20 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:p-8">
-    <div class="mb-6">
+  <main class="mx-auto w-full p-4 sm:p-6 lg:p-8"
+    :class="activeTab === 'users' ? 'max-w-5xl' : 'max-w-3xl'">
+    <div class="mb-4">
       <h1 class="text-2xl font-semibold lg:text-3xl">管理</h1>
-      <p class="mt-1 text-sm text-base-content/60">仅管理员可见的管理功能</p>
     </div>
 
-    <section class="card bg-base-100 shadow-sm">
+    <div role="tablist" class="tabs tabs-box mb-5">
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tags' }"
+        :aria-selected="activeTab === 'tags'" @click="activeTab = 'tags'">标签管理</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'users' }"
+        :aria-selected="activeTab === 'users'" @click="activeTab = 'users'">用户管理</button>
+    </div>
+
+    <section v-show="activeTab === 'tags'" class="card bg-base-100 shadow-sm">
       <div class="card-body gap-4">
         <div>
           <h2 class="card-title text-lg">标签管理</h2>
@@ -288,6 +298,8 @@ onMounted(() => {
         </div>
       </div>
     </section>
+
+    <AdminUsersPanel v-if="activeTab === 'users'" />
 
     <!-- 编辑标签弹窗 -->
     <dialog ref="editDialog" class="modal" @cancel="onEditCancel" @close="onEditClosed">
@@ -373,3 +385,4 @@ onMounted(() => {
     </dialog>
   </main>
 </template>
+

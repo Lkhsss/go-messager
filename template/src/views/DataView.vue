@@ -6,6 +6,7 @@ import { isApiError } from '@/api/http'
 import LineChart from '@/components/charts/LineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import ContributionHeatmap from '@/components/charts/ContributionHeatmap.vue'
+import UserStatsCards from '@/components/UserStatsCards.vue'
 
 const auth = useAuthStore()
 
@@ -65,9 +66,9 @@ watch(unit, () => {
 <template>
   <main class="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
     <header class="mb-6">
-      <p class="text-[0.65rem] font-medium uppercase tracking-[0.3em] text-base-content/40">Insights</p>
+
       <h1 class="mt-1 text-2xl font-semibold lg:text-3xl">数据</h1>
-      <p class="mt-1 text-sm text-base-content/55">文章、互动和社区活跃度统计</p>
+
     </header>
 
     <section class="space-y-4">
@@ -83,36 +84,7 @@ watch(unit, () => {
         <span>{{ errorMy }}</span>
         <button type="button" class="btn btn-sm" @click="loadMyStats">重试</button>
       </div>
-      <div v-else-if="myStats" class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">文章数量</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.post_count }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">字数</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.word_count }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">点赞</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.like }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">踩</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.dislike }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">疑问</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.question }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">我发表的评论</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.comment_count }}</p>
-        </div>
-        <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
-          <p class="text-xs text-base-content/50">文章收到评论</p>
-          <p class="mt-1 font-mono text-2xl font-semibold">{{ myStats.received_comment_count }}</p>
-        </div>
-      </div>
+      <UserStatsCards v-else-if="myStats" :stats="myStats" />
     </section>
 
     <template v-if="auth.isAdmin">
@@ -205,4 +177,7 @@ watch(unit, () => {
     </template>
   </main>
 </template>
+
+
+
 
