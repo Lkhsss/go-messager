@@ -192,6 +192,7 @@ onBeforeUnmount(() => {
         </svg>
         <input v-model="keyword" type="search" class="grow" placeholder="搜索标签"
           @input="onKeywordInput" @keydown.enter.prevent />
+        <kbd class="kbd kbd-xs shrink-0">S</kbd>
         <button v-if="keyword" type="button" class="btn btn-ghost btn-xs" aria-label="清空搜索" @click="clearKeyword">
           ✕
         </button>

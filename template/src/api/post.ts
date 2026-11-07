@@ -82,6 +82,15 @@ export async function fetchPosts({
   };
 }
 
+// 近 24 小时新发文章数 GET /api/recent-post-count
+export async function fetchRecentPostCount(): Promise<number> {
+  const { data } = await http.get<ApiResponse<{ count: number }>>("/recent-post-count");
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "获取 24 小时文章数失败" };
+  }
+  return data.data.count;
+}
+
 export interface CreatePostInput {
   title: string;
   subtitle?: string;

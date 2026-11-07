@@ -31,19 +31,15 @@ type Data struct {
 }
 
 // NewData 初始化数据层：确定 JWT 密钥与有效期。
-func NewData(db *gorm.DB) (*Data, error) {
-	d := &Data{DB: db, JWTTTL: defaultJWTTTL}
-
-	// 可选：JWT_TTL 支持 Go duration 语法，例如 12h、30m
-	if raw := strings.TrimSpace(os.Getenv("JWT_TTL")); raw != "" {
-		ttl, err := time.ParseDuration(raw)
-		if err != nil || ttl <= 0 {
-			return nil, fmt.Errorf("JWT_TTL 配置无效[%s]：需要正的时间段，例如 24h", raw)
-		}
-		d.JWTTTL = ttl
+func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
+	ttl, err := resolveJWTTTL(cfg.TTL)
+	if err != nil {
+		return nil, err
 	}
 
-	secret, err := ensureJWTSecret(db)
+	d := &Data{DB: db, JWTTTL: ttl}
+
+	secret, err := ensureJWTSecret(db, cfg.Secret)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +48,35 @@ func NewData(db *gorm.DB) (*Data, error) {
 	return d, nil
 }
 
+// resolveJWTTTL 按优先级确定 JWT 有效期：
+//  1. JWT_TTL 环境变量（部署时推荐，优先级最高）
+//  2. conf/app.ini 的 [jwt] ttl
+//  3. 默认 24h
+func resolveJWTTTL(configured time.Duration) (time.Duration, error) {
+	if raw := strings.TrimSpace(os.Getenv("JWT_TTL")); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return 0, fmt.Errorf("JWT_TTL 配置无效[%s]：需要正的时间段，例如 24h", raw)
+		}
+		return ttl, nil
+	}
+
+	if configured > 0 {
+		return configured, nil
+	}
+
+	return defaultJWTTTL, nil
+}
+
 // ensureJWTSecret 按优先级取密钥：
 //  1. JWT_SECRET 环境变量（部署时推荐）
-//  2. settings 表里的 jwt_secret（首次启动自动生成并持久化，重启后 token 仍有效）
-func ensureJWTSecret(db *gorm.DB) ([]byte, error) {
+//  2. conf/app.ini 的 [jwt] secret
+//  3. settings 表里的 jwt_secret（首次启动自动生成并持久化，重启后 token 仍有效）
+func ensureJWTSecret(db *gorm.DB, configured string) ([]byte, error) {
 	if secret := strings.TrimSpace(os.Getenv("JWT_SECRET")); secret != "" {
+		return []byte(secret), nil
+	}
+	if secret := strings.TrimSpace(configured); secret != "" {
 		return []byte(secret), nil
 	}
 

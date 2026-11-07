@@ -57,7 +57,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 
 	r := gin.New()
-	if err := api(r, db); err != nil {
+	cfg := DefaultConfig()
+	cfg.JWT.Secret = "test-secret"
+	if err := api(r, db, cfg); err != nil {
 		t.Fatalf("挂载路由失败：%v", err)
 	}
 

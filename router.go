@@ -5,8 +5,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func api(r *gin.Engine, db *gorm.DB) error {
-	data, err := NewData(db)
+func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
+	data, err := NewData(db, cfg.JWT)
 	if err != nil {
 		return err
 	}
@@ -27,6 +27,7 @@ func api(r *gin.Engine, db *gorm.DB) error {
 	authed.PUT("/me/avatar", data.UpdateAvatar)
 	authed.DELETE("/me/avatar", data.DeleteAvatar)
 	authed.GET("/post", data.GetPost)
+	authed.GET("/recent-post-count", data.GetRecentPostCount)
 	authed.GET("/post/:id", data.GetPostByID)
 	authed.POST("/post/new", data.NewPost)
 	authed.POST("/post/:id/reaction", data.ToggleReaction)

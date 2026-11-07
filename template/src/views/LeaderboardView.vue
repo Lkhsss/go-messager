@@ -4,6 +4,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import { fetchLeaderboard, type LeaderboardData, type LeaderboardEntry, type LeaderboardPeriod } from '@/api/leaderboard'
 import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import { renderEmojiText } from '@/utils/markdown'
 
 type LeaderboardType = 'like' | 'dislike' | 'question'
 
@@ -113,7 +114,7 @@ function rankClass(index: number): string {
             </span>
             <UserAvatar :name="entry.post.user" :version="entry.post.user_avatar_version" :size="36" />
             <div class="min-w-0 flex-1">
-              <p class="truncate font-medium">{{ entry.post.title }}</p>
+              <p class="truncate font-medium">{{ renderEmojiText(entry.post.title) }}</p>
               <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-base-content/45">
                 <span class="truncate">{{ entry.post.user }}</span>
                 <span v-if="entry.post.private" class="badge badge-warning badge-sm">Private</span>

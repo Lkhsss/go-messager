@@ -2,8 +2,11 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
@@ -18,11 +21,24 @@ var frontendFS embed.FS
 func main() {
 	StartTimer() // 启动计时器，记录进程启动时刻
 
-	// gin.SetMode(gin.ReleaseMode)
+	cfg, err := LoadConfig(defaultConfigPath)
+	if err != nil {
+		panic(fmt.Errorf("加载配置失败：%w", err))
+	}
+
+	// GIN_MODE 优先；未设置时才应用配置文件中的 mode
+	if cfg.Server.Mode != "" && strings.TrimSpace(os.Getenv("GIN_MODE")) == "" {
+		gin.SetMode(cfg.Server.Mode)
+	}
+
+	// 数据库父目录不存在时自动创建（默认 ./data）
+	if err := ensureDatabaseDir(cfg.Database.Path); err != nil {
+		panic(err)
+	}
 
 	r := gin.Default()
 
-	db, err := gorm.Open(sqlite.Open("data.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(cfg.Database.Path), &gorm.Config{})
 	if err != nil {
 		panic(err) // 或 log.Fatal(err)
 	}
@@ -43,7 +59,7 @@ func main() {
 	}
 
 	// 挂载api
-	if err := api(r, db); err != nil {
+	if err := api(r, db, cfg); err != nil {
 		panic(err)
 	}
 
@@ -63,13 +79,12 @@ func main() {
 		r.NoRoute(spaHandler(distFS))
 	}
 
-	// 监听地址配置。本地测试默认本地回环，减少防火墙提示
-	addr := "0.0.0.0:8080"
-	if gin.Mode() == gin.DebugMode {
-		addr = "127.0.0.1:8080"
+	addr := cfg.ListenAddr()
+	log.Printf("数据库文件：%s", cfg.Database.Path)
+	log.Printf("监听地址：%s", addr)
+	if err := r.Run(addr); err != nil {
+		panic(err)
 	}
-
-	r.Run(addr)
 
 }
 

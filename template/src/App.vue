@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import SidebartoggleOpen from './components/icons/SidebarToggleOpen.vue';
 import SidebarToggleClose from './components/icons/SidebarToggleClose.vue';
@@ -22,6 +22,41 @@ async function logout() {
   auth.logout()
   await router.replace({ name: 'login' })
 }
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement &&
+    Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+}
+
+function focusSearch(): boolean {
+  const input = document.querySelector<HTMLInputElement>('input[type="search"]')
+  if (!input) return false
+  input.focus()
+  input.select()
+  return true
+}
+
+function onShortcutKeydown(event: KeyboardEvent) {
+  if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
+  if (route.meta.layout === 'blank' || isTypingTarget(event.target)) return
+  if (document.querySelector('dialog[open]')) return
+
+  const key = event.key.toLowerCase()
+  if (key === 's') {
+    if (focusSearch()) event.preventDefault()
+    return
+  }
+
+  if (key === 'n') {
+    event.preventDefault()
+    if (route.name !== 'post-new') {
+      void router.push({ name: 'post-new' })
+    }
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onShortcutKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
 </script>
 
 <template>

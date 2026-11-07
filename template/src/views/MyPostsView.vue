@@ -5,6 +5,7 @@ import Pagination from '@/components/Pagination.vue'
 import { deletePost, fetchMyPosts, setPostPrivate, type PostItem } from '@/api/post'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import { renderEmojiText } from '@/utils/markdown'
 import { useAuthStore } from '@/stores/auth'
 
 const PER_PAGE = 10
@@ -38,7 +39,8 @@ async function onTogglePrivate(post: PostItem) {
   try {
     const updated = await setPostPrivate(post.ID, !post.private)
     post.private = updated.private
-    successMsg.value = updated.private ? `文章「${post.title}」已隐藏` : `文章「${post.title}」已取消隐藏`
+    const title = renderEmojiText(post.title)
+    successMsg.value = updated.private ? `文章「${title}」已隐藏` : `文章「${title}」已取消隐藏`
   } catch (err) {
     errorMsg.value = isApiError(err) ? err.message : '更新可见性失败，请稍后再试'
   } finally {
@@ -109,7 +111,7 @@ async function confirmDelete() {
   deleteError.value = ''
   try {
     await deletePost(target.ID)
-    successMsg.value = `文章「${target.title}」已删除`
+    successMsg.value = `文章「${renderEmojiText(target.title)}」已删除`
     deleting.value = false
     deleteDialog.value?.close()
 
@@ -134,7 +136,10 @@ onMounted(() => {
         <h1 class="text-2xl font-semibold lg:text-3xl">我的文章</h1>
         <p v-if="meta" class="mt-1 text-sm text-base-content/60">共 {{ meta.total }} 篇</p>
       </div>
-      <router-link to="/post/new" class="btn btn-primary btn-sm">写文章</router-link>
+      <router-link to="/post/new" class="btn btn-primary btn-sm">
+        写文章
+        <kbd class="kbd kbd-xs">N</kbd>
+      </router-link>
     </div>
 
     <div v-if="successMsg" role="status" class="alert alert-success alert-soft mb-4 py-2 text-sm">
@@ -152,7 +157,10 @@ onMounted(() => {
 
     <div v-else-if="posts.length === 0" class="py-16 text-center text-base-content/50">
       <p>还没有发布文章</p>
-      <router-link to="/post/new" class="btn btn-primary btn-sm mt-4">写第一篇文章</router-link>
+      <router-link to="/post/new" class="btn btn-primary btn-sm mt-4">
+        写第一篇文章
+        <kbd class="kbd kbd-xs">N</kbd>
+      </router-link>
     </div>
 
     <template v-else>
@@ -162,10 +170,10 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="card-title break-words text-lg"><router-link :to="'/post/' + post.ID" class="hover:underline">{{ post.title }}</router-link></h2>
+                  <h2 class="card-title break-words text-lg"><router-link :to="'/post/' + post.ID" class="hover:underline">{{ renderEmojiText(post.title) }}</router-link></h2>
                   <span v-if="post.private" class="badge badge-warning badge-sm">Private</span>
                 </div>
-                <p v-if="post.subtitle" class="break-words text-sm text-base-content/60">{{ post.subtitle }}</p>
+                <p v-if="post.subtitle" class="break-words text-sm text-base-content/60">{{ renderEmojiText(post.subtitle) }}</p>
                 <p class="mt-1 text-xs text-base-content/40">{{ formatDate(post.CreatedAt) }}</p>
               </div>
               <div class="flex shrink-0 items-center gap-1">
@@ -202,7 +210,7 @@ onMounted(() => {
         <h3 class="text-lg font-semibold">删除文章</h3>
 
         <div class="mt-3 space-y-3 text-sm">
-          <p>确定删除「{{ deletingPost?.title }}」吗？</p>
+          <p>确定删除「{{ renderEmojiText(deletingPost?.title ?? '') }}」吗？</p>
           <p class="text-base-content/60">删除后文章将不再显示，标签使用次数会自动更新。</p>
 
           <div v-if="deleteError" role="alert" class="alert alert-error alert-soft py-2 text-sm">

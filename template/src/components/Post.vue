@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { TagItem } from '@/api/tag'
 import type { ReactionSummary, ReactionType } from '@/api/reaction'
 import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderEmojiText, renderMarkdown } from '@/utils/markdown'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 
@@ -31,7 +31,10 @@ defineEmits<{
   (e: 'delete'): void
 }>()
 
+const renderedTitle = computed(() => renderEmojiText(props.title))
+const renderedSubtitle = computed(() => renderEmojiText(props.subtitle))
 const renderedBody = computed(() => renderMarkdown(props.body ?? ''))
+const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
 </script>
 
 <template>
@@ -55,14 +58,14 @@ const renderedBody = computed(() => renderMarkdown(props.body ?? ''))
 
       <div class="space-y-1">
         <h2 class="card-title break-words text-lg">
-          <router-link v-if="!detail" :to="`/post/${postId}`" class="hover:underline">{{ title }}</router-link>
-          <span v-else>{{ title }}</span>
+          <router-link v-if="!detail" :to="`/post/${postId}`" class="hover:underline">{{ renderedTitle }}</router-link>
+          <span v-else>{{ renderedTitle }}</span>
         </h2>
-        <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ subtitle }}</p>
+        <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
       </div>
 
       <div v-if="detail" class="markdown-body text-sm text-base-content/80" v-html="renderedBody"></div>
-      <p v-else-if="excerpt" class="whitespace-pre-line text-sm leading-6 text-base-content/70">{{ excerpt }}</p>
+      <p v-else-if="excerpt" class="whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
 
       <div v-if="!detail" class="flex justify-end">
         <router-link :to="`/post/${postId}`" class="btn btn-ghost btn-sm px-2 text-primary">

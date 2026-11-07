@@ -3,17 +3,19 @@ import { computed, onMounted, ref } from 'vue'
 import Post from '@/components/Post.vue'
 import Pagination from '@/components/Pagination.vue'
 import TagPicker from '@/components/TagPicker.vue'
-import { deletePost, fetchPosts, setPostPrivate, type PostItem } from '@/api/post'
+import { deletePost, fetchPosts, fetchRecentPostCount, setPostPrivate, type PostItem } from '@/api/post'
 import type { TagItem } from '@/api/tag'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
+import { renderEmojiText } from '@/utils/markdown'
 import { useAuthStore } from '@/stores/auth'
 
 const POSTS_PER_PAGE = 10
 
 const posts = ref<PostItem[]>([])
 const meta = ref<PaginationMeta | null>(null)
+const recentPostCount = ref<number | null>(null)
 const page = ref(1)
 const loading = ref(false)
 const errorMsg = ref('')
@@ -152,6 +154,7 @@ async function confirmDelete() {
     deleting.value = false
     deleteDialog.value?.close()
     await loadPosts(nextPage)
+    void loadRecentPostCount()
   } catch (err) {
     deleteError.value = isApiError(err) ? err.message : '删除失败，请稍后再试'
   } finally {
@@ -180,8 +183,17 @@ async function loadPosts(next = page.value) {
   }
 }
 
+async function loadRecentPostCount() {
+  try {
+    recentPostCount.value = await fetchRecentPostCount()
+  } catch {
+    // 保留上一次成功获取的数字；首次失败时标题显示 --。
+  }
+}
+
 onMounted(() => {
   void loadPosts(1)
+  void loadRecentPostCount()
 })
 
 function goTo(next: number) {
@@ -196,10 +208,20 @@ function goTo(next: number) {
   <main class="mx-auto w-full max-w-3xl p-4 sm:p-6 lg:max-w-5xl lg:p-8 2xl:max-w-6xl">
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-semibold lg:text-3xl">帖子</h1>
+        <h1 class="text-xl font-semibold sm:text-2xl lg:text-3xl">
+          <span class="text-rotate duration-6000">
+            <span>
+              <span>帖子</span>
+              <span>最新: {{ recentPostCount ?? '--' }}</span>
+            </span>
+          </span>
+        </h1>
         <p v-if="meta" class="mt-1 text-sm text-base-content/60">共 {{ meta.total }} 条</p>
       </div>
-      <router-link to="/post/new" class="btn btn-primary btn-sm">写文章</router-link>
+      <router-link to="/post/new" class="btn btn-primary btn-sm">
+        写文章
+        <kbd class="kbd kbd-xs">N</kbd>
+      </router-link>
     </div>
 
     <!-- 标签筛选：折叠时展示一排热门标签，支持搜索；点击三态循环 -->
@@ -250,7 +272,7 @@ function goTo(next: number) {
         <h3 class="text-lg font-semibold">删除文章</h3>
 
         <div class="mt-3 space-y-3 text-sm">
-          <p>确定删除「{{ deletingPost?.title }}」吗？</p>
+          <p>确定删除「{{ renderEmojiText(deletingPost?.title ?? '') }}」吗？</p>
           <p class="text-base-content/60">删除后文章将从所有列表和详情中消失，数据保留为已删除状态。</p>
 
           <div v-if="deleteError" role="alert" class="alert alert-error alert-soft py-2 text-sm">

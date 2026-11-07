@@ -1,5 +1,7 @@
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
+import { full as fullEmoji } from "markdown-it-emoji";
+import emojiDefinitions from "markdown-it-emoji/lib/data/full.mjs";
 import hljs from "highlight.js/lib/core";
 
 import bash from "highlight.js/lib/languages/bash";
@@ -61,6 +63,9 @@ const md = new MarkdownIt({
   // 单个换行渲染成 <br>，让老的纯文本文章保持原有换行
   breaks: true,
 });
+
+// GitHub 风格 emoji 短代码，例如 :tada:、:rocket:
+md.use(fullEmoji);
 
 // 链接统一新窗口打开，避免 opener 漏洞
 md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -172,6 +177,17 @@ md.renderer.rules.code_block = (tokens, idx) => {
 
   return renderMockupCode(token.content, "");
 };
+
+const EMOJI_SHORTCODE_RE = /:([a-z0-9_+-]+):/g;
+
+// 标题、副标题、摘要只做 emoji 替换，不启用 Markdown，避免改变原有纯文本语义。
+export function renderEmojiText(source: string): string {
+  if (!source || !source.includes(":")) return source;
+
+  return source.replace(EMOJI_SHORTCODE_RE, (match, name: string) => {
+    return emojiDefinitions[name.toLowerCase()] ?? match;
+  });
+}
 
 export function renderMarkdown(source: string): string {
   const html = md.render(source ?? "");
