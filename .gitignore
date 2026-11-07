@@ -3,3 +3,6 @@
 
 # 本地数据库目录
 data/
+
+# CI 运行时生成的 BuildKit 配置
+.buildx/

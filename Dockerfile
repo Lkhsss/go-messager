@@ -1,10 +1,22 @@
-# syntax=docker/dockerfile:1
+# 注意：这里刻意不写 `# syntax=docker/dockerfile:1`。
+# 该指令会让 BuildKit 在构建开始前先去 registry-1.docker.io 拉取 dockerfile
+# frontend 镜像，在无法访问 docker.io 的网络里会直接超时失败。
+# 本文件只用到 Dockerfile frontend 1.2+ 的稳定能力（RUN --mount=type=cache），
+# Docker 20.10 / BuildKit 0.8 及以后版本自带的 frontend 即可支持，无需额外拉取。
+
+# 基础镜像默认走 docker.io，可用 build-arg 指向镜像加速地址，例如：
+#   --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine
+#   --build-arg GO_IMAGE=docker.1ms.run/library/golang:1.27-alpine
+#   --build-arg RUNTIME_IMAGE=docker.1ms.run/library/alpine:3.22
+ARG NODE_IMAGE=node:24-alpine
+ARG GO_IMAGE=golang:1.27-alpine
+ARG RUNTIME_IMAGE=alpine:3.22
 
 # ---------------------------------------------------------------------------
 # 1. 前端构建：pnpm 安装依赖并执行 vue-tsc 类型检查 + vite 打包
 #    使用 BUILDPLATFORM，多架构构建时前端只在当前 runner 架构上执行一次
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 
 ARG PNPM_VERSION=11
 
@@ -24,7 +36,7 @@ RUN pnpm run build
 # ---------------------------------------------------------------------------
 # 2. 后端构建：把前端 dist 放进 template/dist 后编译，main.go 通过 go:embed 打包
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS backend
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -52,7 +64,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ---------------------------------------------------------------------------
 # 3. 运行镜像：非 root 运行，/data 用于持久化 SQLite 数据库 data.db
 # ---------------------------------------------------------------------------
-FROM alpine:3.22 AS runtime
+FROM ${RUNTIME_IMAGE} AS runtime
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S app \

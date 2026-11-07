@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.1.1
+v0.1.2
 
 Go语言制作的极简论坛
 
@@ -44,6 +44,35 @@ docker run -d --name go-messager -p 8080:8080 \
 mkdir -p data
 mv data.db data/data.db
 ```
+
+## 镜像构建
+
+CI 在推送 `vX.Y.Z` 标签时构建并推送镜像（见 `.gitea/workflows/Build-Docker.yml`）。本地构建：
+
+```bash
+docker build -t go-messager:local .
+```
+
+Dockerfile 没有使用 `# syntax=docker/dockerfile:1`，避免构建开始前还要从 docker.io 拉取 dockerfile frontend；自带 frontend（Docker 20.10+ / BuildKit 0.8+）已支持 `RUN --mount=type=cache`。访问不了 docker.io 时，可把基础镜像指向镜像加速地址：
+
+```bash
+docker build \
+  --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine \
+  --build-arg GO_IMAGE=docker.1ms.run/library/golang:1.27-alpine \
+  --build-arg RUNTIME_IMAGE=docker.1ms.run/library/alpine:3.22 \
+  -t go-messager:local .
+```
+
+CI 中可通过仓库「Settings → Variables」覆盖以下变量：
+
+| 变量            | 默认值                                                   | 说明                                                        |
+| --------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| `DOCKER_MIRRORS` | `docker.1ms.run,docker.m.daocloud.io,docker.1panel.live` | 写入 `buildkitd.toml` 的 docker.io 镜像加速地址，逗号分隔；置空则直连 docker.io |
+| `NODE_IMAGE`    | `node:24-alpine`                                         | 前端构建阶段基础镜像                                        |
+| `GO_IMAGE`      | `golang:1.27-alpine`                                     | 后端构建阶段基础镜像                                        |
+| `RUNTIME_IMAGE` | `alpine:3.22`                                            | 运行阶段基础镜像                                            |
+
+> buildx 的 `docker-container` builder 不会继承 runner 上 dockerd 的 `registry-mirrors`，因此 CI 会把 `DOCKER_MIRRORS` 生成到 `.buildx/buildkitd.toml` 并通过 `setup-buildx-action` 的 `config` 注入。
 
 # TODO
 
