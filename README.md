@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.2.1
+v0.2.2
 
 Go语言制作的极简论坛
 
@@ -133,7 +133,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 | `GO_IMAGE`          | 留空                             | 同上，默认为 `golang:1.27-alpine`                                                                       |
 | `RUNTIME_IMAGE`     | 留空                             | 同上，默认为 `alpine:3.22`                                                                              |
 | `NPM_REGISTRY`      | `https://registry.npmmirror.com` | npm / pnpm 依赖镜像源，同时用于 CI 安装依赖和镜像构建中的 pnpm 安装                                     |
-| `DOCKER_CACHE_TYPE` | `registry`                       | Docker 层缓存后端：`registry`（缓存推到镜像仓库标签）或 `gha`（走 Actions 缓存 API）                    |
+| `DOCKER_CACHE_TYPE` | `registry`                       | Docker 层缓存后端：`registry`（缓存推到镜像仓库标签）、`gha`（走 Actions 缓存 API）或 `none`（只使用本地缓存）；driver 不支持导出时自动退回本地缓存 |
 | `DOCKER_CACHE_REF`  | `buildcache`                     | `registry` 模式下的缓存标签名（`<镜像>:buildcache`），`gha` 模式下的缓存作用域                          |
 
 > 注意：`DOCKER_MIRRORS` 默认 `docker.1ms.run`，可覆盖成逗号分隔的多个地址；换机器部署时请改成自己环境里可用的地址（置空则不做探测、直接使用 docker.io）。
@@ -146,9 +146,15 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 | ------------------ | ---------------------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------- |
 | Go 依赖 + 编译产物 | `actions/setup-go` 内置缓存（`GOMODCACHE` + `GOCACHE`）                            | `go.sum`                  | 日志出现 `Cache restored from key: setup-go-...`                              |
 | 前端依赖           | `pnpm/setup` 缓存 pnpm store                                                       | `template/pnpm-lock.yaml` | 日志出现 `Cache restored from key: ...`，`pnpm install` 走 `--prefer-offline` |
-| Docker 构建层      | registry 缓存（`docker` driver 导出），推到 `<镜像>:buildcache` 标签（`mode=max`） | 每条指令 + 构建上下文哈希 | 构建输出里耗时步骤显示 `CACHED`                                               |
+| Docker 构建层      | registry 缓存（`docker` driver 导出，要求 containerd 镜像存储；否则退回 daemon 本地缓存） | 每条指令 + 构建上下文哈希 | 构建输出里耗时步骤显示 `CACHED`                                               |
 
-> Docker 层缓存由 `docker` driver 导出到 registry，需要 Docker 引擎启用 containerd 镜像存储（`docker info` 里能看到 `driver-type: io.containerd.snapshotter.v1`，当前 runner 已满足）。若某台 runner 不满足，删掉工作流里的 `cache-from` / `cache-to`，退回 daemon 自身的本地缓存即可。
+> `docker` driver 只有在 Docker 引擎启用 containerd 镜像存储时才允许导出构建缓存（`docker info` 里能看到 `driver-type: io.containerd.snapshotter.v1`）。
+> 工作流会读取 `docker info` 自动判断：没有该行时跳过 `cache-from` / `cache-to`，退回 daemon 自身的本地缓存，不会再让构建报
+> `Cache export is not supported for the docker driver`。
+>
+> 想在多台 runner 之间共享构建缓存，可以在 runner 的 `/etc/docker/daemon.json` 中启用 containerd 镜像存储后重启 Docker
+> （`{"features": {"containerd-snapshotter": true}}`）。注意：切换镜像存储后旧镜像/容器不可见，需要重新拉取或重建，生产 runner 慎用。
+> 也可以把 `DOCKER_CACHE_TYPE` 设为 `none` 显式关闭缓存导出。
 
 几个排查用的命令（在 workflow 里也打印了这些信息）：
 

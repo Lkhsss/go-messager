@@ -38,6 +38,9 @@ env:
   # Docker 构建层缓存的后端：
   #   registry（默认）—— 缓存推到镜像仓库的独立标签，Gitea / GHCR / 自建 registry 都能用
   #   gha            —— 走 Actions 缓存 API，需要 runner 提供缓存服务（见 README「CI 缓存」）
+  #   none           —— 不导出缓存，只使用 runner 上 daemon 的本地构建缓存
+  # 注意：registry / gha 要求 docker driver 支持 cache 导出（Docker 引擎启用 containerd 镜像存储），
+  # 不满足时工作流会自动退回本地缓存，不会让构建失败。
   DOCKER_CACHE_TYPE: ${{ vars.DOCKER_CACHE_TYPE || 'registry' }}
   # registry 模式下是缓存标签名（<镜像>:<值>），gha 模式下是缓存作用域名
   DOCKER_CACHE_REF: ${{ vars.DOCKER_CACHE_REF || 'buildcache' }}
@@ -200,20 +203,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          from=""
+          to=""
           # registry：缓存是可拉取的镜像标签，跨 runner、跨机器都能命中
           # gha：缓存存到 Actions 缓存服务，省一个 tag，但要求 runner 提供缓存服务
-          if [[ "${DOCKER_CACHE_TYPE}" == "gha" ]]; then
+          # none：不导出，只使用 daemon 本地缓存
+          if [[ "${DOCKER_CACHE_TYPE}" == "none" ]]; then
+            echo "DOCKER_CACHE_TYPE=none：跳过构建缓存导出，仅使用 runner 本地缓存"
+          elif [[ "${DOCKER_CACHE_TYPE}" == "gha" ]]; then
             from="type=gha,scope=${DOCKER_CACHE_REF}"
             to="type=gha,scope=${DOCKER_CACHE_REF},mode=max"
           else
-            ref="${IMAGE_NAME}:${DOCKER_CACHE_REF}"
-            from="type=registry,ref=${ref}"
-            to="type=registry,ref=${ref},mode=max"
+            # docker driver 只有在启用 containerd 镜像存储时才支持 cache 导出，
+            # 否则 buildx 会直接报错：
+            #   Cache export is not supported for the docker driver.
+            # 这里按 docker info 的 driver-type 判断，不支持时退回 daemon 本地缓存。
+            if docker info --format '{{json .DriverStatus}}' 2>/dev/null | grep -q 'io.containerd.snapshotter.v1'; then
+              ref="${IMAGE_NAME}:${DOCKER_CACHE_REF}"
+              from="type=registry,ref=${ref}"
+              to="type=registry,ref=${ref},mode=max"
+            else
+              echo "::warning::Docker 引擎未启用 containerd 镜像存储（docker info 中没有 driver-type: io.containerd.snapshotter.v1），docker driver 不支持导出构建缓存；本次构建退回 runner 本地缓存。"
+            fi
           fi
           echo "from=${from}" >> "${GITHUB_OUTPUT}"
           echo "to=${to}" >> "${GITHUB_OUTPUT}"
-          echo "cache-from: ${from}"
-          echo "cache-to: ${to}"
+          echo "cache-from: ${from:-<none>}"
+          echo "cache-to: ${to:-<none>}"
 
       - name: 构建并推送
         uses: docker/build-push-action@v7
