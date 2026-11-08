@@ -6,15 +6,13 @@ export interface Credentials {
   password: string;
 }
 
-// 与 Go 端 AuthResult 对齐
 export interface AuthResult {
   token: string;
   expires_at: string;
   user: AuthUser;
 }
 
-// 登录 POST /api/authorize
-// 参数放 JSON body，避免密码出现在 URL / 访问日志里
+// 登录。密码放 body，避免出现在 URL。
 export async function authorize(credentials: Credentials): Promise<AuthResult> {
   const { data } = await http.post<ApiResponse<AuthResult>>("/authorize", credentials);
   if (!data.success || !data.data) {
@@ -23,8 +21,7 @@ export async function authorize(credentials: Credentials): Promise<AuthResult> {
   return data.data;
 }
 
-// 注册 POST /api/register
-// 库里没有用户时，第一个注册的账号是管理员；成功即登录
+// 注册，首个用户是管理员。
 export async function register(credentials: Credentials): Promise<AuthResult> {
   const { data } = await http.post<ApiResponse<AuthResult>>("/register", credentials);
   if (!data.success || !data.data) {
@@ -33,8 +30,7 @@ export async function register(credentials: Credentials): Promise<AuthResult> {
   return data.data;
 }
 
-// 当前用户 GET /api/me（需要 token）
-// 用于校验本地 token 是否仍然有效，并刷新角色（角色以服务端为准）
+// 当前用户。
 export async function fetchMe(): Promise<AuthUser> {
   const { data } = await http.get<ApiResponse<AuthUser>>("/me");
   if (!data.success || !data.data) {
@@ -43,7 +39,7 @@ export async function fetchMe(): Promise<AuthUser> {
   return data.data;
 }
 
-// 上传/替换头像 PUT /api/me/avatar（data URL）
+// 上传/替换头像。
 export async function updateAvatar(avatar: string): Promise<AuthUser> {
   const { data } = await http.put<ApiResponse<AuthUser>>("/me/avatar", { avatar });
   if (!data.success || !data.data) {
@@ -52,7 +48,7 @@ export async function updateAvatar(avatar: string): Promise<AuthUser> {
   return data.data;
 }
 
-// 清除头像 DELETE /api/me/avatar
+// 清除头像。
 export async function removeAvatar(): Promise<AuthUser> {
   const { data } = await http.delete<ApiResponse<AuthUser>>("/me/avatar");
   if (!data.success || !data.data) {

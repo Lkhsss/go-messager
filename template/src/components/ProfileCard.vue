@@ -33,7 +33,7 @@ const cardLabel = computed(() => `${props.name} 的个人名片，角色：${rol
 
 <template>
   <div class="hover-3d w-full max-w-md" role="group" :aria-label="cardLabel">
-    <!-- 第 1 个子元素是卡面，后面的 8 个空 div 是 hover-3d 的方向感应层 -->
+    <!-- 8 个空 div 是 hover-3d 感应层。 -->
     <div class="profile-card relative flex aspect-[1.58] min-h-52 w-full flex-col overflow-hidden rounded-[1.75rem] text-slate-50">
       <div class="profile-glow" aria-hidden="true"></div>
       <div class="profile-grid" aria-hidden="true"></div>
@@ -42,7 +42,7 @@ const cardLabel = computed(() => `${props.name} 的个人名片，角色：${rol
       <div class="relative z-10 flex h-full flex-col justify-between gap-4 p-5 sm:p-6">
         <header class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3">
-            <!-- 无线支付波纹 -->
+            <!-- 支付波纹 -->
             <svg class="h-6 w-6 text-white/50" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M7.5 8.5a7 7 0 0 1 0 7M11 6a11 11 0 0 1 0 12M14.5 3.5a15 15 0 0 1 0 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>

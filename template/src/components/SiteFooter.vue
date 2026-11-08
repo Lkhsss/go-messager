@@ -40,7 +40,7 @@ function addMonths(date: Date, months: number): Date {
   return result
 }
 
-// 计算两个日期之间完整的年、月、日、时、分、秒，避免用 365/30 估算造成月末偏差。
+// 精确计算年月日时分秒，避免按 365/30 估算。
 function elapsedYMDHMS(start: Date, end: Date): Elapsed {
   if (Number.isNaN(start.getTime()) || end <= start) {
     return { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
@@ -73,7 +73,7 @@ function elapsedYMDHMS(start: Date, end: Date): Elapsed {
   return { years: Math.max(0, years), months, days, hours, minutes, seconds }
 }
 
-// daisyUI countdown 用 --value 指定数字，--digits 告诉组件要显示几位。
+// daisyUI countdown 需要 --value 和 --digits。
 function countdownStyle(value: number): Record<string, string> {
   return {
     '--value': String(value),

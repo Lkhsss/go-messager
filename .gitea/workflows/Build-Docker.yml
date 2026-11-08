@@ -19,42 +19,24 @@ permissions:
   packages: write
 
 env:
-  # 默认推送到 GitHub Container Registry。
-  # 使用其他仓库（Docker Hub / Gitea / 阿里云 ACR 等）时，在
-  # 「仓库 → Settings → Variables」中覆盖下面三个变量，并在 Secrets 中添加
-  # REGISTRY_PASSWORD（不配置时依次回退到 GITEA_TOKEN / GITHUB_TOKEN）。
-  #   Docker Hub 示例：
-  #     REGISTRY=docker.io
-  #     IMAGE_NAME=docker.io/<用户名>/go-messager
-  #     REGISTRY_USERNAME=<用户名>
-  #   Gitea 示例：
-  #     REGISTRY=git.lkhssssss.cn
-  #     IMAGE_NAME=git.lkhssssss.cn/lkhsss/go-messager
-  #     REGISTRY_USERNAME=lkhsss
+  # 默认 ghcr.io，可在仓库 Variables 覆盖 REGISTRY / IMAGE_NAME / REGISTRY_USERNAME。
+  # 其他仓库需在 Secrets 配置 REGISTRY_PASSWORD（缺省回退 GITEA_TOKEN / GITHUB_TOKEN）。
   REGISTRY: ${{ vars.REGISTRY || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || format('ghcr.io/{0}', github.repository) }}
   REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME || github.actor }}
-  # 只使用 runner 本机架构构建（不做跨架构，因此不需要 QEMU）
-  # Docker 构建层缓存的后端：
-  #   registry（默认）—— 缓存推到镜像仓库的独立标签，Gitea / GHCR / 自建 registry 都能用
-  #   gha            —— 走 Actions 缓存 API，需要 runner 提供缓存服务（见 README「CI 缓存」）
-  #   none           —— 不导出缓存，只使用 runner 上 daemon 的本地构建缓存
-  # 注意：registry / gha 要求 docker driver 支持 cache 导出（Docker 引擎启用 containerd 镜像存储），
-  # 不满足时工作流会自动退回本地缓存，不会让构建失败。
+  # 只构建 runner 本机架构，无需 QEMU。
+  # DOCKER_CACHE_TYPE：registry / gha / none，不支持导出时自动退回本地缓存。
   DOCKER_CACHE_TYPE: ${{ vars.DOCKER_CACHE_TYPE || 'registry' }}
-  # registry 模式下是缓存标签名（<镜像>:<值>），gha 模式下是缓存作用域名
+  # registry 模式是缓存标签名，gha 模式是作用域。
   DOCKER_CACHE_REF: ${{ vars.DOCKER_CACHE_REF || 'buildcache' }}
-  # 国内 Go 模块代理与校验数据库；可在仓库 Variables 中覆盖
+  # Go 代理和校验库。
   GOPROXY: ${{ vars.GOPROXY || 'https://goproxy.cn,direct' }}
   GOSUMDB: ${{ vars.GOSUMDB || 'sum.golang.google.cn' }}
-  # 前端依赖镜像源（npm / pnpm），默认走 npmmirror；
-  # 换官方源就设 vars.NPM_REGISTRY=https://registry.npmjs.org
+  # 前端依赖镜像源。
   NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
-  # docker.io 镜像加速地址（英文逗号分隔）：CI 依次探测，第一个可用的用于改写基础镜像地址
-  # 默认只用 docker.1ms.run；可覆盖成多个地址（如 a.example,b.example）按顺序探测。
+  # docker.io 镜像加速地址，逗号分隔，按顺序探测。
   DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run' }}
-  # 基础镜像；留空则由探测到的镜像站自动拼装（如 <mirror>/library/node:24-alpine），
-  # 显式设置时（如 vars.NODE_IMAGE=node:24-alpine）原样使用
+  # 基础镜像；留空时按镜像站自动拼装。
   NODE_IMAGE: ${{ vars.NODE_IMAGE || '' }}
   GO_IMAGE: ${{ vars.GO_IMAGE || '' }}
   RUNTIME_IMAGE: ${{ vars.RUNTIME_IMAGE || '' }}
@@ -81,18 +63,16 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          # 开启内置缓存：同时缓存 GOMODCACHE（依赖）与 GOCACHE（编译产物）
+          # 缓存 GOMODCACHE + GOCACHE，key 使用 go.sum。
           cache: true
-          # 用 go.sum 参与缓存 key，避免 go.mod 未变但校验/间接依赖变化时误命中
           cache-dependency-path: go.sum
-          # 仅加速 Go 工具链下载；模块下载由 GOPROXY 控制
+          # 仅影响 Go 工具链下载。
           go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
 
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
         env:
-          # 这个 action 会从 npm registry 下载 pnpm 本体，这两个前缀一起给上：
-          # npm 读 npm_config_registry，pnpm 11+ 读 pnpm_config_registry
+          # 该 action 从 npm registry 下载 pnpm，两个变量都要设。
           npm_config_registry: ${{ env.NPM_REGISTRY }}
           pnpm_config_registry: ${{ env.NPM_REGISTRY }}
         with:
@@ -117,11 +97,10 @@ jobs:
       - name: 安装前端依赖
         working-directory: template
         env:
-          # npm 读 npm_config_registry，pnpm 11+ 读 pnpm_config_registry；
-          # 下面再用 --registry 显式指定，避免本地 .npmrc 覆盖镜像源
+          # 镜像源同时用 env 和 --registry 指定，避免 .npmrc 覆盖。
           npm_config_registry: ${{ env.NPM_REGISTRY }}
           pnpm_config_registry: ${{ env.NPM_REGISTRY }}
-        # --prefer-offline：缓存命中时不再向 registry 校验，冷缓存会自动回退到联网下载
+        # 缓存命中时不联网校验。
         run: pnpm install --frozen-lockfile --prefer-offline --registry "${NPM_REGISTRY}"
 
       - name: 构建前端（含类型检查）
@@ -205,19 +184,15 @@ jobs:
           set -euo pipefail
           from=""
           to=""
-          # registry：缓存是可拉取的镜像标签，跨 runner、跨机器都能命中
-          # gha：缓存存到 Actions 缓存服务，省一个 tag，但要求 runner 提供缓存服务
-          # none：不导出，只使用 daemon 本地缓存
+          # registry 可跨机器复用；gha 需要 runner 提供缓存服务；none 只用本地。
           if [[ "${DOCKER_CACHE_TYPE}" == "none" ]]; then
             echo "DOCKER_CACHE_TYPE=none：跳过构建缓存导出，仅使用 runner 本地缓存"
           elif [[ "${DOCKER_CACHE_TYPE}" == "gha" ]]; then
             from="type=gha,scope=${DOCKER_CACHE_REF}"
             to="type=gha,scope=${DOCKER_CACHE_REF},mode=max"
           else
-            # docker driver 只有在启用 containerd 镜像存储时才支持 cache 导出，
-            # 否则 buildx 会直接报错：
-            #   Cache export is not supported for the docker driver.
-            # 这里按 docker info 的 driver-type 判断，不支持时退回 daemon 本地缓存。
+            # docker driver 需要 containerd 镜像存储才支持 cache 导出，
+            # 不支持时退回本地缓存。
             if docker info --format '{{json .DriverStatus}}' 2>/dev/null | grep -q 'io.containerd.snapshotter.v1'; then
               ref="${IMAGE_NAME}:${DOCKER_CACHE_REF}"
               from="type=registry,ref=${ref}"
@@ -236,7 +211,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          # 不指定 platforms：直接用 runner 上 Docker 引擎自带的 builder 构建本机架构
+          # 不指定 platforms，构建本机架构。
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -248,7 +223,6 @@ jobs:
             GO_IMAGE=${{ steps.mirror.outputs.go_image }}
             RUNTIME_IMAGE=${{ steps.mirror.outputs.runtime_image }}
           pull: true
-          # mode=max：连未被最终镜像引用的中间层（如 pnpm install、go mod download）
-          # 也一起导出，Dockerfile 里这些耗时步骤下次才能直接命中
+          # mode=max 同时导出中间层，耗时步骤下次可直接命中。
           cache-from: ${{ steps.cache.outputs.from }}
           cache-to: ${{ steps.cache.outputs.to }}

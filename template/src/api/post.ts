@@ -2,8 +2,7 @@ import http, { type ApiResponse, type PaginationMeta } from "./http";
 import type { TagItem } from "./tag";
 import type { ReactionSummary, ReactionType } from "./reaction";
 
-// 与 Go 端 model.go 的 Post 对齐：
-// gorm.Model 没有 json tag，ID / 时间字段是首字母大写，业务字段来自 Post 的 tag（小写）。
+// 对应 Go 端 Post，gorm 字段首字母大写。
 export interface PostItem {
   ID: number;
   CreatedAt: string;
@@ -13,17 +12,17 @@ export interface PostItem {
   title: string;
   subtitle: string;
   body?: string;
-  // 首页摘要（纯文本），列表接口不返回正文
+  // 列表接口只返回摘要。
   excerpt?: string;
-  // 管理员隐藏后为 true；仅作者与管理员可见
+  // 仅作者与管理员可见。
   private: boolean;
-  // 评论字段：原文为空；评论的 root_id 指向原文，parent_id 指向父评论
+  // 评论：root_id 指向原文，parent_id 指向父评论。
   parent_id?: number | null;
   root_id?: number | null;
-  // 作者头像版本（头像图片走 /api/avatar 接口）
+  // 作者头像版本。
   user_avatar_version?: string;
   tags?: TagItem[];
-  // 反应汇总 + 当前用户已做出的反应
+  // 反应汇总和我的反应。
   reactions?: ReactionSummary;
   my_reactions?: ReactionType[];
 }
@@ -35,9 +34,9 @@ export interface CommentItem extends PostItem {
 export interface PostQuery {
   page?: number;
   perPage?: number;
-  // 必须同时包含的标签（AND）
+  // 必须同时包含。
   includeTagIds?: number[];
-  // 必须一个都不包含的标签
+  // 必须都不包含。
   excludeTagIds?: number[];
 }
 
@@ -46,9 +45,7 @@ export interface PostListResult {
   meta: PaginationMeta;
 }
 
-// 帖子列表 GET /api/post?page=1&per_page=20&include_tag_ids=1,2&exclude_tag_ids=3
-// page 最小为 1；per_page 范围 1~100（后端会截断），默认 20。
-// 标签用逗号串传递：axios 默认会把数组序列化成 tag[]=1，gin 那边解析不到。
+// 标签用逗号串传递，避免 axios 序列化成数组。
 export async function fetchPosts({
   page = 1,
   perPage = 20,
@@ -72,7 +69,6 @@ export async function fetchPosts({
   const posts = data.data;
   return {
     posts,
-    // 后端空页也会返回 meta；缺失时按当前返回结果兜底
     meta: data.meta ?? {
       page,
       per_page: perPage,
@@ -82,7 +78,7 @@ export async function fetchPosts({
   };
 }
 
-// 近 24 小时新发文章数 GET /api/recent-post-count
+// 近 24 小时文章数。
 export async function fetchRecentPostCount(): Promise<number> {
   const { data } = await http.get<ApiResponse<{ count: number }>>("/recent-post-count");
   if (!data.success || !data.data) {
@@ -95,11 +91,11 @@ export interface CreatePostInput {
   title: string;
   subtitle?: string;
   body: string;
-  // 最多 5 个，后端会再校验一次
+  // 最多 5 个。
   tag_ids?: number[];
 }
 
-// 创建帖子 POST /api/post/new（需登录，作者由 token 决定）
+// 创建帖子。
 export async function createPost(input: CreatePostInput): Promise<PostItem> {
   const { data } = await http.post<ApiResponse<PostItem>>("/post/new", input);
   if (!data.success || !data.data) {
@@ -109,7 +105,7 @@ export async function createPost(input: CreatePostInput): Promise<PostItem> {
 }
 
 
-// 我的文章 GET /api/me/posts?page=1&per_page=10
+// 我的文章。
 export async function fetchMyPosts({ page = 1, perPage = 10 }: Pick<PostQuery, "page" | "perPage"> = {}): Promise<PostListResult> {
   const { data } = await http.get<ApiResponse<PostItem[]>>("/me/posts", {
     params: { page, per_page: perPage },
@@ -131,7 +127,7 @@ export async function fetchMyPosts({ page = 1, perPage = 10 }: Pick<PostQuery, "
   };
 }
 
-// 文章详情 GET /api/post/:id
+// 文章详情。
 export async function fetchPost(id: number): Promise<PostItem> {
   const { data } = await http.get<ApiResponse<PostItem>>(`/post/${id}`);
   if (!data.success || !data.data) {
@@ -140,7 +136,7 @@ export async function fetchPost(id: number): Promise<PostItem> {
   return data.data;
 }
 
-// 编辑自己的文章 PUT /api/post/:id
+// 编辑文章。
 export async function updatePost(id: number, input: CreatePostInput): Promise<PostItem> {
   const { data } = await http.put<ApiResponse<PostItem>>(`/post/${id}`, input);
   if (!data.success || !data.data) {
@@ -149,7 +145,7 @@ export async function updatePost(id: number, input: CreatePostInput): Promise<Po
   return data.data;
 }
 
-// 删除自己的文章 DELETE /api/post/:id
+// 删除文章。
 export async function deletePost(id: number): Promise<void> {
   const { data } = await http.delete<ApiResponse<{ id: number }>>(`/post/${id}`);
   if (!data.success) {
@@ -157,7 +153,7 @@ export async function deletePost(id: number): Promise<void> {
   }
 }
 
-// 管理员隐藏/取消隐藏文章 PATCH /api/post/:id/private
+// 隐藏/取消隐藏文章。
 export async function setPostPrivate(id: number, isPrivate: boolean): Promise<PostItem> {
   const { data } = await http.patch<ApiResponse<PostItem>>(`/post/${id}/private`, { private: isPrivate });
   if (!data.success || !data.data) {
@@ -167,7 +163,7 @@ export async function setPostPrivate(id: number, isPrivate: boolean): Promise<Po
 }
 
 
-// 获取某篇文章的评论（扁平列表，前端按 parent_id 组树）
+// 评论列表，前端按 parent_id 组树。
 export async function fetchComments(postId: number): Promise<PostItem[]> {
   const { data } = await http.get<ApiResponse<PostItem[]>>(`/post/${postId}/comments`);
   if (!data.success || !data.data) {
@@ -176,7 +172,7 @@ export async function fetchComments(postId: number): Promise<PostItem[]> {
   return data.data;
 }
 
-// 发表评论或回复 POST /api/post/:id/comments
+// 发表评论或回复。
 export async function createComment(postId: number, body: string, parentId?: number): Promise<PostItem> {
   const payload: { body: string; parent_id?: number } = { body };
   if (parentId) {

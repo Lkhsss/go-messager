@@ -332,7 +332,7 @@ onMounted(() => {
     </div>
   </section>
 
-  <!-- 用户详情：统计与“数据”页共用 UserStatsCards -->
+  <!-- 用户详情统计 -->
   <dialog ref="detailDialog" class="modal" @close="onDetailClosed">
     <div class="modal-box max-w-4xl">
       <div class="flex flex-wrap items-start justify-between gap-3">

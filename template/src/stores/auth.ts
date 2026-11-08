@@ -11,7 +11,7 @@ import {
 import { clearAuth, readAuth, writeAuth, type AuthUser, type StoredAuth } from "@/api/authStorage";
 import { isApiError } from "@/api/http";
 
-// 这些错误码说明登录态已不可用，需要清掉登录态
+// 这些错误码需要清登录态。
 const AUTH_ERROR_CODES = ["UNAUTHORIZED", "INVALID_TOKEN", "TOKEN_EXPIRED", "ACCOUNT_DISABLED"];
 
 export const useAuthStore = defineStore("auth", () => {
@@ -21,8 +21,7 @@ export const useAuthStore = defineStore("auth", () => {
   const user = ref<AuthUser | null>(initial?.user ?? null);
   const expiresAt = ref(initial?.expiresAt ?? "");
 
-  // 已经通过 /api/me 校验过的 token，避免每次路由跳转都发请求。
-  // 初始为 null：刷新页面后先校验一次，避免信任 localStorage 里的旧角色/已封禁账号。
+  // 已校验的 token；初始为 null，刷新后先校验一次。
   let validatedToken: string | null = null;
   let inflight: Promise<boolean> | null = null;
 
@@ -58,7 +57,7 @@ export const useAuthStore = defineStore("auth", () => {
     return result;
   }
 
-  // 上传头像：token 不变，只刷新用户资料
+  // 只刷新用户资料。
   async function updateAvatar(dataUrl: string) {
     const nextUser = await updateAvatarApi(dataUrl);
     if (token.value) {
@@ -67,7 +66,7 @@ export const useAuthStore = defineStore("auth", () => {
     return nextUser;
   }
 
-  // 清除头像
+  // 清除头像。
   async function removeAvatar() {
     const nextUser = await removeAvatarApi();
     if (token.value) {
@@ -81,13 +80,12 @@ export const useAuthStore = defineStore("auth", () => {
     clearAuth();
   }
 
-  // 从 localStorage 重新读取登录态（其它标签页登录/退出后同步过来）
+  // 从 localStorage 同步登录态。
   function sync() {
     applyStored(readAuth());
   }
 
-  // 校验本地 token 是否仍然有效，并从服务端刷新角色。
-  // 角色以数据库为准：管理员在后台把某人改成 none 后，前端下次校验就会失效。
+  // 校验 token 并从服务端刷新角色。
   async function ensureSession(): Promise<boolean> {
     sync();
 
@@ -105,13 +103,13 @@ export const useAuthStore = defineStore("auth", () => {
     const requestedToken = token.value;
     inflight = fetchMe()
       .then((me) => {
-        // 请求期间用户可能已经退出或换了账号
+        // 期间可能已退出或换号。
         if (token.value !== requestedToken) return false;
         setAuth({ token: requestedToken, expiresAt: expiresAt.value, user: me });
         return true;
       })
       .catch((err) => {
-        // 只有服务端明确否认 token 才登出；网络故障时保留登录态，避免断网掉线
+        // 仅服务端否认 token 时登出。
         if (isApiError(err) && AUTH_ERROR_CODES.includes(err.code)) {
           logout();
         }

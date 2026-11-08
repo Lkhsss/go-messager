@@ -13,7 +13,7 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 
-// token 失效（见 api/http.ts）时清登录态并回到登录页，保留当前路径方便登录后跳回
+// token 失效：清登录态并回登录页。
 window.addEventListener(AUTH_EXPIRED_EVENT, () => {
   const auth = useAuthStore();
   auth.logout();

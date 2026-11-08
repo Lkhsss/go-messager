@@ -1,4 +1,4 @@
-// 登录态存储：独立模块，供 axios 拦截器和 Pinia store 共用，避免循环依赖。
+// 登录态存储，供 axios 和 Pinia 共用。
 import type { ReactionSummary } from "./reaction";
 
 export type Role = "admin" | "user" | "none";
@@ -21,8 +21,17 @@ export interface StoredAuth {
 // token 失效时派发的事件，由 main.ts 监听后跳转登录页
 export const AUTH_EXPIRED_EVENT = "go-messager:auth-expired";
 
-// 旧版本只存了用户名（go-messager:user），token 体系是新 key，老用户重新登录一次即可
+// token 体系使用带版本的新 key，旧版只存用户名的登录态不再兼容
 const STORAGE_KEY = "go-messager:auth:v2";
+
+// 清理旧版只存用户名的 key。
+const LEGACY_STORAGE_KEY = "go-messager:user";
+
+try {
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+} catch {
+  // localStorage 不可用时忽略
+}
 
 function isRole(value: unknown): value is Role {
   return value === "admin" || value === "user" || value === "none";

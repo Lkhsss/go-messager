@@ -24,26 +24,24 @@ func main() {
 		panic(fmt.Errorf("加载配置失败：%w", err))
 	}
 
-	// GIN_MODE 优先；未设置时才应用配置文件中的 mode
+	// GIN_MODE 优先，未设置时用配置。
 	if cfg.Server.Mode != "" && strings.TrimSpace(os.Getenv("GIN_MODE")) == "" {
 		gin.SetMode(cfg.Server.Mode)
 	}
 
-	// 数据库父目录不存在时自动创建（默认 ./data）
+	// 自动创建数据库目录。
 	if err := ensureDatabaseDir(cfg.Database.Path); err != nil {
 		panic(err)
 	}
 
-	// 打开前先确认库文件与所在目录可写：
-	// 容器以非 root 用户运行时，bind mount 的 /data 属主常常还是 root，
-	// 这一步能把「权限不对」直接报出来，而不是等到 sqlite 抛抽象错误。
+	// 提前检查写权限，容器里更容易定位权限问题。
 	if err := checkDatabaseWritable(cfg.Database.Path); err != nil {
 		panic(err)
 	}
 
 	r := gin.Default()
 
-	// 全局 gzip：API JSON 与嵌入的前端静态资源都会按需压缩
+	// 全局 gzip。
 	r.Use(gzipCompression())
 
 	log.Printf("数据库文件：%s", cfg.Database.Path)
@@ -53,39 +51,35 @@ func main() {
 		panic(err)
 	}
 
-	// 数据库自动建表
+	// 建表。
 	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}); err != nil {
 		panic(err)
 	}
 
-	// 启动时校准标签使用次数（幂等）
+	// 启动时校准计数。
 	if err := syncTagUsageCounts(db); err != nil {
 		panic(err)
 	}
 
-	// 启动时校准文章/用户的反应统计（幂等）
+	// 启动时校准计数。
 	if err := syncReactionCounts(db); err != nil {
 		panic(err)
 	}
 
-	// 挂载api
+	// 注册 API。
 	if err := api(r, db, cfg); err != nil {
 		panic(err)
 	}
 
 	if gin.Mode() == gin.ReleaseMode {
 
-		// 前端文件嵌入
+		// 嵌入前端资源。
 		distFS, err := fs.Sub(frontendFS, "template/dist")
 		if err != nil {
 			panic(err)
 		}
 
-		// 前端静态资源 + SPA 兜底
-		// 注意：不能用 r.StaticFS("/", ...)，它注册的 /*filepath 是 catchAll 节点，
-		// 注册后无法再加 /api/xxx 这样的精确路由，
-		// 否则 panic: '/api/ping' conflicts with existing wildcard '/*filepath'。
-		// 所以统一放到 NoRoute 处理：先找静态文件，找不到再回退 index.html。
+		// 静态资源 + SPA 兜底。不能用 StaticFS：/*filepath 会和 /api 路由冲突。
 		r.NoRoute(spaHandler(distFS))
 	}
 
@@ -97,10 +91,7 @@ func main() {
 
 }
 
-// spaHandler 兜底处理所有未匹配的路由：
-//   - /api 开头的路径返回 JSON 404，不做前端回退；
-//   - 静态文件存在则直接返回；
-//   - 其余路径回退到 index.html，交给前端路由（vue-router）处理。
+// spaHandler：API 404，静态文件优先，其余回退 index.html。
 func spaHandler(distFS fs.FS) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
@@ -113,7 +104,7 @@ func spaHandler(distFS fs.FS) gin.HandlerFunc {
 			name = "index.html"
 		}
 
-		// 静态文件存在则直接返回，否则回退 index.html
+		// 存在则直接返回，否则回退。
 		if serveFile(c, distFS, name) {
 			return
 		}
@@ -122,9 +113,7 @@ func spaHandler(distFS fs.FS) gin.HandlerFunc {
 	}
 }
 
-// serveFile 把 distFS 中的静态文件写入响应。
-// 不用 c.FileFromFS：它内部的 http.FileServer 会对 /、目录等路径做 301 重定向，
-// 导致 SPA 根路径跳转异常。这里直接把文件内容写回，并设置 Content-Type。
+// serveFile 直接写文件，避免 FileFromFS 的 301 重定向。
 func serveFile(c *gin.Context, distFS fs.FS, name string) bool {
 	info, err := fs.Stat(distFS, name)
 	if err != nil || info.IsDir() {

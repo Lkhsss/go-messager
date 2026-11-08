@@ -10,6 +10,6 @@ const html = computed(() => renderMarkdown(props.source ?? ''))
 </script>
 
 <template>
-  <!-- 唯一引用 utils/markdown 的组件：配合 defineAsyncComponent 让列表页不加载 markdown-it / highlight.js -->
+  <!-- 唯一引用 markdown 工具的组件，异步加载。 -->
   <div class="markdown-body" v-html="html"></div>
 </template>

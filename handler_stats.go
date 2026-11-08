@@ -55,7 +55,7 @@ type AdminStatsResponse struct {
 	Heatmap            []HeatmapPoint `json:"heatmap"`
 }
 
-// GetMyStats 当前用户的文章/互动统计 GET /api/me/stats
+// GetMyStats 个人统计。
 func (d *Data) GetMyStats(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -72,8 +72,7 @@ func (d *Data) GetMyStats(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, stats)
 }
 
-// loadUserStats 按用户名统计文章/互动数据。
-// 个人数据页与管理员用户详情共用，确保两处数字一致。
+// loadUserStats 统计用户文章和互动。
 func (d *Data) loadUserStats(name string) (UserStatsResponse, error) {
 	var posts []Post
 	if err := d.DB.Select("char_count", "like_count", "dislike_count", "question_count").
@@ -107,7 +106,7 @@ WHERE c.deleted_at IS NULL AND c.root_id IS NOT NULL AND r.user = ?
 	return stats, nil
 }
 
-// countTextCharacters 按 Unicode 字符计数，忽略空白字符。
+// countTextCharacters 按字符计数，忽略空白。
 func countTextCharacters(parts ...string) int64 {
 	var count int64
 	for _, part := range parts {
@@ -120,7 +119,7 @@ func countTextCharacters(parts ...string) int64 {
 	return count
 }
 
-// GetAdminStats 管理员全站统计 GET /api/admin/stats?unit=day
+// GetAdminStats 全站统计。
 func (d *Data) GetAdminStats(c *gin.Context) {
 	unit := c.DefaultQuery("unit", "day")
 	switch unit {

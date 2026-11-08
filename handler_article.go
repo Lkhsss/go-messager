@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 每篇文章最多可选择的标签数
+// 每篇文章最多标签数。
 const (
 	maxTagsPerPost       = 5
 	maxPostBodyRunes     = 100000
@@ -39,7 +39,7 @@ func validatePostLengths(title, subtitle, body string) (string, string) {
 	return "", ""
 }
 
-// buildExcerpt 从 Markdown 正文生成纯文本摘要，最多 300 个可见字符。
+// buildExcerpt 从 Markdown 生成纯文本摘要。
 func buildExcerpt(body string) string {
 	text := markdownFencePattern.ReplaceAllString(body, " ")
 	text = markdownImagePattern.ReplaceAllString(text, " ")
@@ -63,11 +63,11 @@ func buildExcerpt(body string) string {
 	return text
 }
 
-// 创建文章 POST /api/post/new（需登录，作者取自 token，标签最多 5 个）
+// NewPost 创建文章。
 func (d *Data) NewPost(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		// 正常走不到这里（路由上已挂 AuthRequired），兜底避免拿不到用户
+		// 路由已挂 AuthRequired，这里兜底。
 		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
 		return
 	}
@@ -82,7 +82,7 @@ func (d *Data) NewPost(c *gin.Context) {
 		Response{}.Fail(c, http.StatusBadRequest, code, message)
 		return
 	}
-	// 去重后再判断数量，防止用重复 ID 绕过上限
+	// 去重后再判断数量。
 	tagIDs := uniqueIDs(req.TagIDs)
 	if len(tagIDs) > maxTagsPerPost {
 		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
@@ -111,7 +111,7 @@ func (d *Data) NewPost(c *gin.Context) {
 		Tags:      tags,
 	}
 
-	// 创建文章与累加标签使用次数放在同一个事务里，避免计数和关联表不一致
+	// 文章和标签计数放在同一事务。
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&post).Error; err != nil {
 			return err
@@ -136,10 +136,7 @@ func (d *Data) NewPost(c *gin.Context) {
 	Response{}.Ok(c, http.StatusCreated, post)
 }
 
-// 文章列表 GET /api/post?page=1&per_page=20
-//
-//	&include_tag_ids=1,2   必须同时包含所有列出的标签（AND）
-//	&exclude_tag_ids=3,4   不能包含其中任意一个（NOT）
+// GetPost 文章列表，支持标签过滤。
 func (d *Data) GetPost(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -158,7 +155,7 @@ func (d *Data) GetPost(c *gin.Context) {
 	})
 }
 
-// applyPostVisibility 普通用户只看公开文章 + 自己发布的 Private 文章；管理员看全部未删除文章。
+// applyPostVisibility 普通用户只看公开文章和自己的私有文章。
 func applyPostVisibility(db *gorm.DB, user User) *gorm.DB {
 	if user.Role == RoleAdmin {
 		return db
@@ -166,12 +163,12 @@ func applyPostVisibility(db *gorm.DB, user User) *gorm.DB {
 	return db.Where("is_private = ? OR user = ?", false, user.Name)
 }
 
-// canViewPost 判断当前用户能否查看某篇 Private 文章。
+// canViewPost 判断能否查看私有文章。
 func canViewPost(post Post, user User) bool {
 	return !post.IsPrivate || user.Role == RoleAdmin || post.User == user.Name
 }
 
-// canViewPostThread 评论额外校验所属原文的可见性，避免绕过原文 Private 状态直接给评论点赞。
+// canViewPostThread 评论还要校验原文可见性。
 func (d *Data) canViewPostThread(post Post, user User) bool {
 	if !canViewPost(post, user) {
 		return false
@@ -187,12 +184,11 @@ func (d *Data) canViewPostThread(post Post, user User) bool {
 	return canViewPost(root, user)
 }
 
-// postPrivateInput 管理员切换文章 Private 状态的请求体。
 type postPrivateInput struct {
 	Private *bool `json:"private"`
 }
 
-// SetPostPrivate 管理员隐藏/取消隐藏文章 PATCH /api/post/:id/private
+// SetPostPrivate 隐藏/取消隐藏文章。
 func (d *Data) SetPostPrivate(c *gin.Context) {
 	id, ok := parsePostID(c)
 	if !ok {
@@ -232,7 +228,7 @@ func (d *Data) SetPostPrivate(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, result[0])
 }
 
-// GetMyPosts 当前用户自己的文章 GET /api/me/posts?page=1&per_page=20
+// GetMyPosts 当前用户的文章。
 func (d *Data) GetMyPosts(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -245,8 +241,7 @@ func (d *Data) GetMyPosts(c *gin.Context) {
 	})
 }
 
-// UpdatePost 编辑自己的文章 PUT /api/post/:id
-// 只能修改标题、副标题、正文和标签；作者与反应统计不受影响。
+// UpdatePost 编辑自己的文章。
 func (d *Data) UpdatePost(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -308,7 +303,7 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	excerpt := buildExcerpt(req.Body)
 	charCount := countTextCharacters(req.Title, req.Subtitle, req.Body)
 
-	// 文章字段与多对多关联放在同一事务里；标签使用次数全量校准，避免增量维护出错
+	// 更新字段和标签，校准使用次数。
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&post).Updates(map[string]any{
 			"title":      req.Title,
@@ -344,8 +339,7 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, post)
 }
 
-// DeletePost 删除文章 DELETE /api/post/:id（作者或管理员）
-// 使用软删除，文章不再出现在列表/详情；同时校准标签使用次数。
+// DeletePost 软删除文章并校准标签计数。
 func (d *Data) DeletePost(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -396,7 +390,7 @@ func (d *Data) DeletePost(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
 }
 
-// collectCommentDescendants 收集一条评论及其所有回复的 ID，用于级联软删除。
+// collectCommentDescendants 收集评论及所有回复。
 func collectCommentDescendants(tx *gorm.DB, rootID uint) ([]uint, error) {
 	ids := []uint{rootID}
 	frontier := []uint{rootID}
@@ -424,7 +418,7 @@ func collectCommentDescendants(tx *gorm.DB, rootID uint) ([]uint, error) {
 
 const maxCommentLength = 10000
 
-// GetComments 获取某篇文章的评论（扁平列表，前端按 parent_id 组树）GET /api/post/:id/comments
+// GetComments 文章评论（扁平列表）。
 func (d *Data) GetComments(c *gin.Context) {
 	rootID, ok := parsePostID(c)
 	if !ok {
@@ -467,8 +461,7 @@ func (d *Data) GetComments(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, comments)
 }
 
-// CreateComment 发表评论 POST /api/post/:id/comments
-// 省略 parent_id 是顶层评论；带 parent_id 时必须是同一原文下的评论。
+// CreateComment 发表评论或回复。
 func (d *Data) CreateComment(c *gin.Context) {
 	rootID, ok := parsePostID(c)
 	if !ok {
@@ -545,7 +538,7 @@ func (d *Data) CreateComment(c *gin.Context) {
 	Response{}.Ok(c, http.StatusCreated, result[0])
 }
 
-// parsePostID 解析路径里的文章 ID，非法时直接写 400 响应。
+// parsePostID 解析文章 ID。
 func parsePostID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -556,7 +549,7 @@ func parsePostID(c *gin.Context) (uint, bool) {
 	return uint(id), true
 }
 
-// 文章详情 GET /api/post/:id（含标签）
+// GetPostByID 文章详情。
 func (d *Data) GetPostByID(c *gin.Context) {
 	id, ok := parsePostID(c)
 	if !ok {
@@ -600,7 +593,7 @@ func (d *Data) GetPostByID(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, post)
 }
 
-// listPosts 分页查询文章并预加载标签，filter 用于追加过滤条件（如按标签过滤）
+// listPosts 分页查询文章。
 func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	page, perPage := parsePagination(c)
 
@@ -612,14 +605,14 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 		return db
 	}
 
-	// 总数用于计算总页数，不需要 order/limit/offset
+	// 总数用于计算页数。
 	var total int64
 	if err := base().Count(&total).Error; err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "COUNT_FAILED", err.Error())
 		return
 	}
 
-	// 新文章在前：created_at DESC，同一时间戳用 id DESC 兜底，保证翻页顺序稳定
+	// 新文章在前，同一时间用 id 兜底。
 	var posts []Post
 	if err := base().
 		Select("id", "created_at", "updated_at", "deleted_at", "user", "title", "subtitle", "excerpt", "is_private", "parent_id", "root_id", "like_count", "dislike_count", "question_count", "emoji_counts", "char_count").
@@ -651,11 +644,10 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	})
 }
 
-// 每侧（包含 / 排除）最多允许的标签数
+// 每侧最多过滤标签数。
 const maxFilterTags = 20
 
-// parseTagFilters 解析 include_tag_ids / exclude_tag_ids，返回去重后的列表。
-// 同一标签同时出现在两边时排除优先，不报错。
+// parseTagFilters 解析包含/排除标签。
 func parseTagFilters(c *gin.Context) (include, exclude []uint, filterErr *ErrorInfo) {
 	include, ok := parseIDList(c.Query("include_tag_ids"))
 	if !ok {
@@ -686,8 +678,7 @@ func parseTagFilters(c *gin.Context) (include, exclude []uint, filterErr *ErrorI
 	return kept, exclude, nil
 }
 
-// parseIDList 解析 "1,2,3" 形式的标签 ID 列表：
-// 容忍空格与尾随逗号，去重，0 或非数字视为非法。
+// parseIDList 解析逗号分隔的 ID。
 func parseIDList(raw string) ([]uint, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -720,8 +711,7 @@ func parseIDList(raw string) ([]uint, bool) {
 	return ids, true
 }
 
-// applyTagFilter 给文章查询追加标签条件。
-// include 用多个 IN 子查询实现 AND；exclude 用一个 NOT IN 子查询实现 NOT。
+// applyTagFilter 追加标签过滤条件。
 func applyTagFilter(db *gorm.DB, include, exclude []uint) *gorm.DB {
 	for _, id := range include {
 		db = db.Where("posts.id IN (SELECT post_id FROM post_tags WHERE tag_id = ?)", id)
@@ -734,7 +724,7 @@ func applyTagFilter(db *gorm.DB, include, exclude []uint) *gorm.DB {
 	return db
 }
 
-// uniqueIDs 去掉重复与 0 值，保持原有顺序
+// uniqueIDs 去重并忽略 0。
 func uniqueIDs(ids []uint) []uint {
 	seen := make(map[uint]struct{}, len(ids))
 	result := make([]uint, 0, len(ids))
@@ -753,7 +743,7 @@ func uniqueIDs(ids []uint) []uint {
 	return result
 }
 
-// ensurePostTags 保证 tags 序列化成 [] 而不是 null，方便前端处理
+// ensurePostTags 让 tags 序列化为 []。
 func ensurePostTags(posts []Post) {
 	for i := range posts {
 		if posts[i].Tags == nil {
@@ -762,14 +752,13 @@ func ensurePostTags(posts []Post) {
 	}
 }
 
-// 分页默认值与上限
+// 分页默认值和上限。
 const (
 	defaultPerPage = 20
 	maxPerPage     = 100
 )
 
-// parsePagination 解析 page / per_page 查询参数，非法或缺失时回落到默认值。
-// page 最小为 1，per_page 范围为 1~100，默认 20。
+// parsePagination 解析 page/per_page。
 func parsePagination(c *gin.Context) (page, perPage int) {
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if err != nil || page < 1 {

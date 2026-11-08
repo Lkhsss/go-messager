@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	// 标签名长度上限（按字符数算，中文也算 1 个）
+	// 标签名长度上限。
 	maxTagNameLength = 30
-	// 标签列表一次最多返回多少条
+	// 列表条数上限。
 	maxTagLimit = 200
 )
 
 var hexColorPattern = regexp.MustCompile(`^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
-// 创建标签 POST /api/tag（仅管理员）
+// CreateTag 创建标签。
 func (d *Data) CreateTag(c *gin.Context) {
 	var req TagInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,8 +63,7 @@ func (d *Data) CreateTag(c *gin.Context) {
 	Response{}.Ok(c, http.StatusCreated, tag)
 }
 
-// UpdateTag 编辑标签 PUT /api/tag/:id（仅管理员）
-// 名称与颜色一起更新；color 传空字符串表示恢复默认高级灰。
+// UpdateTag 编辑名称和颜色。
 func (d *Data) UpdateTag(c *gin.Context) {
 	id, ok := parseTagID(c)
 	if !ok {
@@ -103,7 +102,7 @@ func (d *Data) UpdateTag(c *gin.Context) {
 		return
 	}
 
-	// 名称唯一，但允许保持自己原来的名字
+	// 允许保持原名。
 	var count int64
 	if err := d.DB.Model(&Tag{}).Where("name = ? AND id <> ?", name, id).Count(&count).Error; err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
@@ -114,7 +113,7 @@ func (d *Data) UpdateTag(c *gin.Context) {
 		return
 	}
 
-	// 用 map 更新，确保 color 从有值改成空字符串时也能写入
+	// 用 map 更新，允许 color 置空。
 	if err := d.DB.Model(&tag).Updates(map[string]any{
 		"name":  name,
 		"color": color,
@@ -128,8 +127,7 @@ func (d *Data) UpdateTag(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, tag)
 }
 
-// DeleteTag 删除标签 DELETE /api/tag/:id（仅管理员）
-// 硬删除标签并清理 post_tags 关联，文章本身保留；删除后可以重新创建同名标签。
+// DeleteTag 硬删除标签并清理关联。
 func (d *Data) DeleteTag(c *gin.Context) {
 	id, ok := parseTagID(c)
 	if !ok {
@@ -147,7 +145,7 @@ func (d *Data) DeleteTag(c *gin.Context) {
 	}
 
 	if err := d.DB.Transaction(func(tx *gorm.DB) error {
-		// 先清关联，再硬删除标签：Tag.Name 有唯一索引，软删除会阻止以后重建同名标签
+		// 先清关联再硬删除，否则唯一索引会阻止重建同名标签。
 		if err := tx.Exec("DELETE FROM post_tags WHERE tag_id = ?", id).Error; err != nil {
 			return err
 		}
@@ -160,7 +158,7 @@ func (d *Data) DeleteTag(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
 }
 
-// parseTagID 解析路径里的标签 ID，非法时直接写 400 响应。
+// parseTagID 解析标签 ID。
 func parseTagID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -171,10 +169,7 @@ func parseTagID(c *gin.Context) (uint, bool) {
 	return uint(id), true
 }
 
-// GetTags 标签列表 GET /api/tag?q=go&sort=hot&limit=13
-//   - q：按名称模糊搜索
-//   - sort：name（默认，按名称）/ hot（按使用次数倒序，同次数按名称）
-//   - limit：可选，1~200；不传表示全部（前端折叠时传 13 以便判断是否还有更多）
+// GetTags 标签列表，支持 q/sort/limit。
 func (d *Data) GetTags(c *gin.Context) {
 	keyword := strings.TrimSpace(c.Query("q"))
 	sortBy := c.DefaultQuery("sort", "name")
@@ -182,7 +177,7 @@ func (d *Data) GetTags(c *gin.Context) {
 
 	db := d.DB.Model(&Tag{})
 	if keyword != "" {
-		// 转义通配符，避免用户输入的 % / _ 变成通配
+		// 转义 LIKE 通配符。
 		db = db.Where("name LIKE ? ESCAPE '\\'", "%"+escapeLike(keyword)+"%")
 	}
 
@@ -210,8 +205,7 @@ func (d *Data) GetTags(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, tags)
 }
 
-// normalizeTagColor 把 #RGB / #RRGGBB（# 可省略）归一化为小写 #rrggbb。
-// 空字符串表示不指定颜色，由前端使用默认的高级灰。
+// normalizeTagColor 归一化为小写 #rrggbb。
 func normalizeTagColor(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -229,7 +223,7 @@ func normalizeTagColor(raw string) (string, bool) {
 	return "#" + hex, true
 }
 
-// parseTagLimit 解析 limit，0 表示不限制；非法值宽松回落到不限制。
+// parseTagLimit 解析 limit，0 表示不限制。
 func parseTagLimit(raw string) int {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -247,7 +241,7 @@ func parseTagLimit(raw string) int {
 	return limit
 }
 
-// escapeLike 转义 LIKE 的通配符，配合 ESCAPE '\' 使用
+// escapeLike 转义 LIKE 通配符。
 func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "%", "\\%")

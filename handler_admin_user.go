@@ -12,8 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// AdminUserListItem 是管理员用户列表里的单行数据。
-// 统计口径与 /api/me/stats 一致：文章数只算原文，互动只算原文收到的反应。
+// AdminUserListItem 用户列表行。
 type AdminUserListItem struct {
 	ID            uint       `json:"id"`
 	Name          string     `json:"name"`
@@ -31,7 +30,7 @@ type AdminUserListItem struct {
 	Question      int64      `json:"question"`
 }
 
-// AdminUserDetailResponse 用户详情 + 与个人数据页相同的统计。
+// AdminUserDetailResponse 用户详情和统计。
 type AdminUserDetailResponse struct {
 	User  AdminUserListItem `json:"user"`
 	Stats UserStatsResponse `json:"stats"`
@@ -45,7 +44,7 @@ type adminUserPasswordInput struct {
 	Password string `json:"password"`
 }
 
-// GetAdminUsers 用户列表 GET /api/admin/users?page=1&per_page=20&q=name
+// GetAdminUsers GET /api/admin/users
 func (d *Data) GetAdminUsers(c *gin.Context) {
 	page, perPage := parsePagination(c)
 	keyword := strings.TrimSpace(c.Query("q"))
@@ -93,8 +92,7 @@ func (d *Data) GetAdminUsers(c *gin.Context) {
 	})
 }
 
-// GetAdminUserDetail 用户详情 GET /api/admin/users/:id
-// stats 与 GET /api/me/stats 使用同一个 loadUserStats，避免两处统计口径漂移。
+// GetAdminUserDetail GET /api/admin/users/:id
 func (d *Data) GetAdminUserDetail(c *gin.Context) {
 	id, ok := parseAdminUserID(c)
 	if !ok {
@@ -128,8 +126,7 @@ func (d *Data) GetAdminUserDetail(c *gin.Context) {
 	})
 }
 
-// SetAdminUserStatus 封禁/解封 PATCH /api/admin/users/:id/status
-// 封禁使用 RoleNone，AuthRequired 每次都会从数据库读角色，因此已登录令牌会立即失效。
+// SetAdminUserStatus 封禁/解封。
 func (d *Data) SetAdminUserStatus(c *gin.Context) {
 	current, ok := CurrentUser(c)
 	if !ok {
@@ -181,7 +178,7 @@ func (d *Data) SetAdminUserStatus(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, items[0])
 }
 
-// SetAdminUserPassword 管理员修改用户密码 PUT /api/admin/users/:id/password
+// SetAdminUserPassword 修改用户密码。
 func (d *Data) SetAdminUserPassword(c *gin.Context) {
 	id, ok := parseAdminUserID(c)
 	if !ok {
@@ -197,7 +194,7 @@ func (d *Data) SetAdminUserPassword(c *gin.Context) {
 		Response{}.Fail(c, http.StatusBadRequest, "PASSWORD_REQUIRED", "密码不能为空")
 		return
 	}
-	// bcrypt 只接受最多 72 字节，提前返回可读错误而不是 500。
+	// bcrypt 最多 72 字节。
 	if len([]byte(req.Password)) > 72 {
 		Response{}.Fail(c, http.StatusBadRequest, "PASSWORD_TOO_LONG", "密码最多 72 字节")
 		return
@@ -222,8 +219,7 @@ func (d *Data) SetAdminUserPassword(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
 }
 
-// DeleteAdminUser 删除用户 DELETE /api/admin/users/:id
-// 只软删除账号，保留其文章与评论，避免误删社区内容；账号删除后不能再登录。
+// DeleteAdminUser 软删除账号，保留文章和评论。
 func (d *Data) DeleteAdminUser(c *gin.Context) {
 	current, ok := CurrentUser(c)
 	if !ok {
@@ -268,7 +264,7 @@ func parseAdminUserID(c *gin.Context) (uint, bool) {
 	return uint(id), true
 }
 
-// adminUserItems 批量填充用户列表统计，避免每行单独查询。
+// adminUserItems 批量填充用户统计。
 func (d *Data) adminUserItems(users []User) ([]AdminUserListItem, error) {
 	items := make([]AdminUserListItem, len(users))
 	if len(users) == 0 {
@@ -368,7 +364,7 @@ func (d *Data) adminUserItems(users []User) ([]AdminUserListItem, error) {
 			item.Question = aggregate.QuestionTotal
 		}
 
-		// 注册本身也算一次活动；没有任何后续操作时显示注册时间，而不是“从未”。
+		// 注册也算一次活动。
 		lastActive := user.CreatedAt
 		mergeActivity := func(value time.Time) {
 			if value.After(lastActive) {
@@ -395,8 +391,7 @@ func (d *Data) adminUserItems(users []User) ([]AdminUserListItem, error) {
 	return items, nil
 }
 
-// parseSQLiteTime 解析 MAX(created_at) 聚合后返回的字符串。
-// SQLite 的聚合列会丢掉 time.Time 类型信息，需要兼容常见的时间格式。
+// parseSQLiteTime 解析聚合后的时间字符串。
 func parseSQLiteTime(raw string) (time.Time, bool) {
 	if raw == "" {
 		return time.Time{}, false

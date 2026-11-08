@@ -1,4 +1,4 @@
-// 头像接口地址。公开接口，带版本号用于换头像后破缓存。
+// 头像地址，版本号用于破缓存。
 export function avatarUrl(name: string, version?: string | null): string | null {
   if (!name || !version) {
     return null;
@@ -25,7 +25,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-// 上传前处理：居中裁正方形、缩到 256×256、输出 JPEG data URL（约 10–25KB）
+// 居中裁剪并缩放到 256×256，输出 JPEG。
 export async function fileToAvatarDataUrl(file: File, size = AVATAR_SIZE): Promise<string> {
   if (!/^image\/(jpeg|png)$/.test(file.type)) {
     throw new Error("只支持 JPEG/PNG 图片");
@@ -45,7 +45,7 @@ export async function fileToAvatarDataUrl(file: File, size = AVATAR_SIZE): Promi
     throw new Error("当前浏览器不支持图片处理");
   }
 
-  // 白底，避免透明 PNG 转 JPEG 后变黑
+  // 白底，避免透明区域变黑。
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, size, size);
 

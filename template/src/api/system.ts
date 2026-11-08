@@ -1,8 +1,8 @@
 import http, { type ApiResponse } from "./http";
 
-// 系统状态 GET /api/status（公开接口）
+// 系统状态。
 export interface SystemStatus {
-  // false 表示数据库里还没有用户，前端应引导创建第一个管理员账号
+  // 没有用户时为 false，需要初始化。
   initialized: boolean;
 }
 
@@ -14,10 +14,10 @@ export async function getStatus(): Promise<SystemStatus> {
   return data.data;
 }
 
-// 运行时长 GET /api/uptime（公开接口）
+// 运行时长。
 export interface UptimeInfo {
   uptime_seconds: number;
-  // 后端进程启动时刻；老版本后端可能不返回，前端会用 uptime_seconds 兜底
+  // 后端启动时刻，可能缺失。
   started_at?: string;
 }
 

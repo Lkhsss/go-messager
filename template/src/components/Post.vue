@@ -7,7 +7,7 @@ import { renderEmojiText } from '@/utils/emoji'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 
-// 正文 Markdown 与代码高亮体量大，异步加载：列表页只需要 emoji 替换
+// Markdown 和代码高亮异步加载。
 const MarkdownContent = defineAsyncComponent(() => import('@/components/MarkdownContent.vue'))
 
 const props = defineProps<{

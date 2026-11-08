@@ -7,8 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetRecentPostCount 近 24 小时新发文章数 GET /api/recent-post-count
-// 只统计原文，不统计评论；可见性规则与首页文章列表一致。
+// GetRecentPostCount 近 24 小时原文数。
 func (d *Data) GetRecentPostCount(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {

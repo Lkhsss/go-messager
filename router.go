@@ -13,14 +13,14 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 
 	g := r.Group("/api")
 
-	// 公开接口
+	// 公开
 	g.GET("/status", data.Status)    // 是否已初始化（有没有第一个用户）
 	g.GET("/avatar", data.GetAvatar) // 公开：<img> 无法携带 Bearer
 	g.POST("/authorize", data.Authorize)
 	g.POST("/register", data.Register)
 	g.GET("/uptime", data.Uptime)
 
-	// 需要登录的接口
+	// 需登录
 	authed := g.Group("")
 	authed.Use(data.AuthRequired())
 	authed.GET("/me", data.Me)
@@ -33,14 +33,13 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	authed.POST("/post/:id/reaction", data.ToggleReaction)
 	authed.GET("/tag", data.GetTags)
 
-	// 需要管理员权限的接口
+	// 需管理员
 	admin := g.Group("")
 	admin.Use(data.AuthRequired(), data.AdminOnly())
 	admin.POST("/tag", data.CreateTag)
 	admin.PUT("/tag/:id", data.UpdateTag)
 	admin.DELETE("/tag/:id", data.DeleteTag)
 
-	// 用户管理
 	admin.GET("/admin/users", data.GetAdminUsers)
 	admin.GET("/admin/users/:id", data.GetAdminUserDetail)
 	admin.PATCH("/admin/users/:id/status", data.SetAdminUserStatus)

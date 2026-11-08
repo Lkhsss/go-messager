@@ -9,8 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// UpdateAvatar 上传/替换头像 PUT /api/me/avatar
-// 请求体是前端压缩后的 data URL（JPEG/PNG），服务端只校验并原样存库。
+// UpdateAvatar 上传/替换头像。
 func (d *Data) UpdateAvatar(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -46,7 +45,7 @@ func (d *Data) UpdateAvatar(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, user.View())
 }
 
-// DeleteAvatar 清除头像 DELETE /api/me/avatar
+// DeleteAvatar 清除头像。
 func (d *Data) DeleteAvatar(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -63,8 +62,7 @@ func (d *Data) DeleteAvatar(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, user.View())
 }
 
-// GetAvatar 读取用户头像 GET /api/avatar?name=alice
-// 必须公开：<img> 标签无法携带 Bearer token，且头像本身不是敏感信息。
+// GetAvatar 公开读取头像（img 标签无法带 token）。
 func (d *Data) GetAvatar(c *gin.Context) {
 	name := strings.TrimSpace(c.Query("name"))
 	if name == "" {

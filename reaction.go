@@ -12,14 +12,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 主反应（用独立列存储）
+// 主反应列。
 var primaryReactionColumns = map[ReactionType]string{
 	ReactionLike:     "like_count",
 	ReactionDislike:  "dislike_count",
 	ReactionQuestion: "question_count",
 }
 
-// 全部允许的反应类型
+// 允许的反应类型。
 var allowedReactionTypes = map[ReactionType]struct{}{
 	ReactionLike:     {},
 	ReactionDislike:  {},
@@ -36,7 +36,7 @@ func isValidReactionType(t ReactionType) bool {
 	return ok
 }
 
-// buildReactionSummary 由冗余列组装成响应结构
+// buildReactionSummary 组装反应汇总。
 func buildReactionSummary(like, dislike, question int64, emojiJSON string) ReactionSummary {
 	return ReactionSummary{
 		Like:     like,
@@ -46,7 +46,6 @@ func buildReactionSummary(like, dislike, question int64, emojiJSON string) React
 	}
 }
 
-// parseEmojiCounts 解析 JSON 列里的表情计数
 func parseEmojiCounts(raw string) map[string]int64 {
 	counts := map[string]int64{}
 	if strings.TrimSpace(raw) == "" {
@@ -58,7 +57,7 @@ func parseEmojiCounts(raw string) map[string]int64 {
 	return counts
 }
 
-// fillPostReactions 为文章列表填充反应汇总与「我的反应」，一次批量查询避免 N+1
+// fillPostReactions 批量填充反应汇总和我的反应。
 func (d *Data) fillPostReactions(posts []Post, userID uint) {
 	if len(posts) == 0 {
 		return
@@ -95,7 +94,6 @@ func (d *Data) fillPostReactions(posts []Post, userID uint) {
 	}
 }
 
-// myReactionTypes 查询某用户对某文章已做出的反应
 func (d *Data) myReactionTypes(postID, userID uint) []ReactionType {
 	result := []ReactionType{}
 
@@ -112,8 +110,7 @@ func (d *Data) myReactionTypes(postID, userID uint) []ReactionType {
 	return result
 }
 
-// ToggleReaction 切换对文章的反应 POST /api/post/:id/reaction
-// 已存在则取消（删除明细并 -1），否则新增（+1）。三种主反应与表情互不影响。
+// ToggleReaction 切换反应。
 func (d *Data) ToggleReaction(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -137,7 +134,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		return
 	}
 
-	// 计数包含 JSON 列的读改写，用进程内互斥保证单实例下的一致性
+	// JSON 列的读改写用进程内锁保护。
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -155,7 +152,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
 		return
 	}
-	// 作者（文章按用户名关联用户，用于作者总计）
+	// 作者用户名，用于聚合作者总计。
 	var authorID uint
 	var author User
 	if err := d.DB.Select("id").Where("name = ?", post.User).Take(&author).Error; err == nil {
@@ -204,7 +201,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 	})
 }
 
-// applyReactionDelta 在同一事务里更新文章与作者用户的总计数
+// applyReactionDelta 更新文章和作者计数。
 func applyReactionDelta(tx *gorm.DB, postID, authorID uint, reactionType ReactionType, delta int64) error {
 	column, isPrimary := primaryReactionColumns[reactionType]
 	if isPrimary {
@@ -228,7 +225,6 @@ func applyReactionDelta(tx *gorm.DB, postID, authorID uint, reactionType Reactio
 	return updateEmojiCounts(tx, &User{}, authorID, reactionType, delta)
 }
 
-// updateEmojiCounts 读改写 JSON 列里的表情计数
 func updateEmojiCounts(tx *gorm.DB, model any, id uint, reactionType ReactionType, delta int64) error {
 	var current struct {
 		EmojiCounts string
@@ -252,8 +248,7 @@ func updateEmojiCounts(tx *gorm.DB, model any, id uint, reactionType ReactionTyp
 	return tx.Model(model).Where("id = ?", id).UpdateColumn("emoji_counts", string(raw)).Error
 }
 
-// syncReactionCounts 按 reactions 明细全量重算文章与作者的计数（启动时执行，幂等）。
-// 以后如果漏维护计数，重启即可自愈；软删除的文章不计入。
+// syncReactionCounts 全量重算反应计数，启动时执行。
 func syncReactionCounts(db *gorm.DB) error {
 	type row struct {
 		PostID uint
@@ -309,7 +304,7 @@ func syncReactionCounts(db *gorm.DB) error {
 		addTo(userAggregates[item.Owner], item.Type, item.Total)
 	}
 
-	// 先清零，再写回有反应的行，保证取消后计数能回落
+	// 先清零，再写回有计数的行。
 	if err := db.Exec("UPDATE posts SET like_count = 0, dislike_count = 0, question_count = 0, emoji_counts = ''").Error; err != nil {
 		return fmt.Errorf("重置文章反应统计失败：%w", err)
 	}

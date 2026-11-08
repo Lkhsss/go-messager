@@ -73,7 +73,7 @@ watch(
 
 <template>
   <div class="relative shrink-0 overflow-hidden rounded-full" :style="boxStyle">
-    <!-- 字母占位始终在底层，加载完成后被图片覆盖 -->
+    <!-- 字母占位，图片加载后覆盖 -->
     <div class="absolute inset-0 flex items-center justify-center bg-primary text-primary-content">
       <span class="font-semibold" :style="textStyle">{{ initial }}</span>
     </div>

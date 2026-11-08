@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	// 解码后的图片字节上限
+	// 图片字节上限
 	maxAvatarBytes = 300 * 1024
-	// 单边像素上限（前端会压到 256×256）
+	// 单边像素上限
 	maxAvatarSide = 512
-	// data URL 字符串长度上限（粗校验，避免把超长字符串塞进数据库）
+	// data URL 长度上限
 	maxAvatarBase64 = 420 * 1024
 )
 
@@ -30,8 +30,7 @@ var (
 
 var avatarDataURLPattern = regexp.MustCompile(`^data:image/(jpeg|png);base64,`)
 
-// normalizeAvatar 校验上传的 data URL，返回可直接存库的字符串。
-// 只接受 JPEG/PNG；拒绝 SVG（XSS 风险）、GIF/WEBP（避免额外解码依赖）。
+// normalizeAvatar 校验 data URL，只接受 JPEG/PNG。
 func normalizeAvatar(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -63,7 +62,6 @@ func normalizeAvatar(raw string) (string, error) {
 	return raw, nil
 }
 
-// decodeAvatarDataURL 拆出 MIME 与二进制内容
 func decodeAvatarDataURL(raw string) (mime string, data []byte, err error) {
 	if !avatarDataURLPattern.MatchString(raw) {
 		return "", nil, errUnsupportedAvatar
@@ -83,7 +81,7 @@ func decodeAvatarDataURL(raw string) (mime string, data []byte, err error) {
 	return mime, data, nil
 }
 
-// avatarVersion 取存库内容的哈希前 12 位，作为头像 URL 的缓存版本号。
+// avatarVersion 头像内容哈希，用于缓存版本。
 func avatarVersion(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
@@ -93,8 +91,7 @@ func avatarVersion(raw string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-// fillPostAvatars 批量补上文章作者的头像版本，避免逐条查询用户。
-// 头像图片本身走 /api/avatar 接口，文章响应里只放版本号。
+// fillPostAvatars 批量补作者头像版本。
 func (d *Data) fillPostAvatars(posts []Post) {
 	names := make([]string, 0, len(posts))
 	seen := make(map[string]struct{}, len(posts))

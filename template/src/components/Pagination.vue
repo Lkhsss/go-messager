@@ -21,7 +21,7 @@ const emit = defineEmits<{
   change: [page: number]
 }>()
 
-// 生成页码：页数不多时全部展示；否则只保留首尾页、当前页和两侧兄弟页，中间用省略号
+// 页数多时只显示首尾、当前页和相邻页。
 const buttons = computed<PageButton[]>(() => {
   const total = props.totalPages
   if (total <= 0) return []

@@ -65,7 +65,6 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
   <div v-else class="drawer lg:drawer-open">
     <input id="my-drawer-4" v-model="sidebarOpen" type="checkbox" class="drawer-toggle inline" />
     <div class="drawer-content flex min-h-screen flex-col">
-      <!-- Navbar -->
       <nav class="navbar w-full bg-base-300">
         <button type="button" :aria-label="sidebarOpen ? 'close sidebar' : 'open sidebar'" aria-controls="my-drawer-4"
           :aria-expanded="sidebarOpen" class="btn btn-square btn-ghost drawer-button" @click="toggleSidebar">
@@ -87,7 +86,6 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>
         </div>
       </nav>
-      <!-- Page content here -->
       <div class="flex-1">
         <RouterView />
       </div>
@@ -97,19 +95,15 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
     <div class="drawer-side is-drawer-close:overflow-visible">
       <label for="my-drawer-4" aria-label="close sidebar" class="drawer-overlay"></label>
       <div class="flex min-h-full flex-col items-start bg-base-200 is-drawer-close:w-14 is-drawer-open:w-64">
-        <!-- Sidebar content here -->
         <ul class="menu w-full grow">
-          <!-- List item -->
           <li>
 
             <router-link to="/" class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Homepage">
-              <!-- Home icon -->
               <HomeIcon />
               <span class="is-drawer-close:hidden">Homepage</span>
             </router-link>
           </li>
 
-          <!-- List item -->
           <li>
             <router-link to="/post/new" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
               data-tip="写文章">
@@ -173,11 +167,9 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
             </router-link>
           </li>
 
-          <!-- List item -->
           <li>
             <router-link to="/setting" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
               data-tip="Settings">
-              <!-- Settings icon -->
               <SettingIcon />
               <span class="is-drawer-close:hidden">Settings</span>
             </router-link>

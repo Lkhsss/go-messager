@@ -244,7 +244,7 @@ onMounted(() => {
             </button>
           </div>
 
-          <!-- 颜色可选：不勾选则使用默认高级灰 -->
+          <!-- 不勾选使用默认色 -->
           <div class="flex flex-wrap items-center gap-3 text-sm">
             <label class="flex cursor-pointer items-center gap-2">
               <input v-model="useCustomColor" type="checkbox" class="toggle toggle-sm" />

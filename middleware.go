@@ -10,11 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// ctxUserKey 是 AuthRequired 写入当前用户的 context key
+// 当前用户在 context 中的 key。
 const ctxUserKey = "auth.user"
 
-// AuthRequired 校验 Bearer token，并把当前用户放进 context。
-// 角色从数据库读取而不是信任 token 里的 role，这样封禁/降权可以立即生效。
+// AuthRequired 校验 token，并从数据库加载用户（角色以库为准）。
 func (d *Data) AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearerToken(c.GetHeader("Authorization"))
@@ -64,7 +63,7 @@ func (d *Data) AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// AdminOnly 要求当前用户的角色是 admin，需挂在 AuthRequired 之后
+// AdminOnly 要求管理员，需在 AuthRequired 之后。
 func (d *Data) AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, ok := CurrentUser(c)
@@ -84,7 +83,7 @@ func (d *Data) AdminOnly() gin.HandlerFunc {
 	}
 }
 
-// CurrentUser 取出 AuthRequired 写入的当前用户
+// CurrentUser 取出当前用户。
 func CurrentUser(c *gin.Context) (User, bool) {
 	value, ok := c.Get(ctxUserKey)
 	if !ok {
@@ -95,38 +94,18 @@ func CurrentUser(c *gin.Context) (User, bool) {
 	return user, ok
 }
 
-// gzipExcludedExtensions 是本身已压缩、再 gzip 没有收益的扩展名。
-// 注意：WithExcludedExtensions 会替换库的默认排除表，所以 png/jpg/gif/jpeg 也要显式列出。
+// 已压缩格式，跳过 gzip。
 var gzipExcludedExtensions = []string{
 	".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",
 	".woff", ".woff2", ".gz", ".zip",
 }
 
-// gzipCompression 返回全局 gzip 压缩中间件：
-//   - 仅当请求头带 Accept-Encoding: gzip 时压缩，并返回 Vary: Accept-Encoding；
-//   - 头像接口直接返回 JPEG/PNG，按路径前缀排除，避免无意义的二次压缩。
-//
-// 这里刻意不使用 gzip.WithMinLength：gin-contrib/gzip v1.2.9 在
-// 「Content-Length < minLength」时会直接写明文，随后才删除 Content-Encoding，
-// 而写明文时响应头已经发出（gin 的 c.Data 会设置 Content-Length），
-// 客户端就会收到「声明 gzip、body 是明文」的响应并解码失败（Web UI 白屏）。
+// gzipCompression 全局 gzip。不使用 WithMinLength：v1.2.9 会让小响应
+// 声明 Content-Encoding: gzip 但正文未压缩，导致前端解码失败。
 func gzipCompression() gin.HandlerFunc {
 	return gzip.Gzip(
 		gzip.DefaultCompression,
 		gzip.WithExcludedExtensions(gzipExcludedExtensions),
 		gzip.WithExcludedPaths([]string{"/api/avatar"}),
 	)
-}
-
-// ErrorHandler 捕获 handler 通过 c.Error 追加的错误，并返回统一格式的错误响应。
-// 注意：handler 自己已经写过响应（c.Writer.Written()）时不再重复写。
-func ErrorHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Next() // 先执行后续 handler
-
-		if len(c.Errors) > 0 && !c.Writer.Written() {
-			err := c.Errors.Last().Err
-			Response{}.Fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
-		}
-	}
 }

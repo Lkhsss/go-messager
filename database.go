@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// JWT 相关配置
+// JWT 配置。
 const (
 	jwtSecretSettingKey = "jwt_secret"
 	jwtSecretBytes      = 32
@@ -27,14 +27,11 @@ type Data struct {
 	JWTSecret []byte
 	JWTTTL    time.Duration
 
-	// mu 保护「第一个用户成为 admin」的计数与插入。
-	// 当前是单实例部署，进程内互斥足够；多实例部署时应改成数据库约束。
+	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
 }
 
-// openDatabase 打开 SQLite 数据库。
-// 失败时把库路径和排查方向写进错误信息：sqlite 原始报错通常只有
-// "unable to open database file"，在容器里看不出是路径、权限还是磁盘问题。
+// openDatabase 打开 SQLite，错误里附带路径和排查提示。
 func openDatabase(dbPath string) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
@@ -44,11 +41,7 @@ func openDatabase(dbPath string) (*gorm.DB, error) {
 	return db, nil
 }
 
-// checkDatabaseWritable 在打开数据库前探测写权限。
-// SQLite 除了要写库文件，还要在同一个目录下创建 journal/WAL 文件，
-// 所以目录不可写同样会打开失败。容器以非 root 用户运行时，
-// bind mount 进来的宿主目录属主往往还是 root，提前探测能把这类问题
-// 直接暴露成「不可写」，而不是打开时一句抽象的错误。
+// checkDatabaseWritable 检查库文件和目录写权限。
 func checkDatabaseWritable(dbPath string) error {
 	file, err := os.OpenFile(dbPath, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
@@ -75,7 +68,7 @@ func checkDatabaseWritable(dbPath string) error {
 	return nil
 }
 
-// NewData 初始化数据层：确定 JWT 密钥与有效期。
+// NewData 初始化数据层。
 func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 	ttl, err := resolveJWTTTL(cfg.TTL)
 	if err != nil {
@@ -93,10 +86,7 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 	return d, nil
 }
 
-// resolveJWTTTL 按优先级确定 JWT 有效期：
-//  1. JWT_TTL 环境变量（部署时推荐，优先级最高）
-//  2. conf/app.ini 的 [jwt] ttl
-//  3. 默认 24h
+// resolveJWTTTL：JWT_TTL > 配置 > 24h。
 func resolveJWTTTL(configured time.Duration) (time.Duration, error) {
 	if raw := strings.TrimSpace(os.Getenv("JWT_TTL")); raw != "" {
 		ttl, err := time.ParseDuration(raw)
@@ -113,10 +103,7 @@ func resolveJWTTTL(configured time.Duration) (time.Duration, error) {
 	return defaultJWTTTL, nil
 }
 
-// ensureJWTSecret 按优先级取密钥：
-//  1. JWT_SECRET 环境变量（部署时推荐）
-//  2. conf/app.ini 的 [jwt] secret
-//  3. settings 表里的 jwt_secret（首次启动自动生成并持久化，重启后 token 仍有效）
+// ensureJWTSecret：JWT_SECRET > 配置 > settings 表自动生成。
 func ensureJWTSecret(db *gorm.DB, configured string) ([]byte, error) {
 	if secret := strings.TrimSpace(os.Getenv("JWT_SECRET")); secret != "" {
 		return []byte(secret), nil
@@ -141,7 +128,7 @@ func ensureJWTSecret(db *gorm.DB, configured string) ([]byte, error) {
 	secret := base64.RawURLEncoding.EncodeToString(raw)
 
 	if err := db.Create(&Setting{Key: jwtSecretSettingKey, Value: secret}).Error; err != nil {
-		// 并发启动时可能已被另一个进程写入，重新读一次
+		// 并发启动时可能已被写入，重读一次。
 		var existing Setting
 		if readErr := db.Where("key = ?", jwtSecretSettingKey).Take(&existing).Error; readErr == nil {
 			return []byte(existing.Value), nil
@@ -154,7 +141,7 @@ func ensureJWTSecret(db *gorm.DB, configured string) ([]byte, error) {
 
 func (d *Data) GetUserByName(name string) (User, error) {
 	var user User
-	// 用 Take 而不是 Find：查不到时会返回 gorm.ErrRecordNotFound，便于区分「用户不存在」和「数据库故障」
+	// 用 Take 区分不存在和数据库错误。
 	if err := d.DB.Where("name = ?", name).Take(&user).Error; err != nil {
 		return User{}, fmt.Errorf("查询用户[%s]失败：%w", name, err)
 	}
@@ -173,7 +160,7 @@ func (d *Data) GetUserByID(id uint) (User, error) {
 
 func (d *Data) IfUserExist(name string) (bool, error) {
 	var count int64
-	// 包含已软删除账号：删除账号后保留其文章，用户名也不能被新账号复用。
+	// 包含软删除账号，用户名不可复用。
 	err := d.DB.Unscoped().Model(&User{}).Where("name = ?", name).Count(&count).Error
 	if err != nil {
 		return false, fmt.Errorf("查询用户名[%w]错误", err)
@@ -192,8 +179,7 @@ func (d *Data) IfTagExist(name string) (bool, error) {
 	return count > 0, nil
 }
 
-// syncTagUsageCounts 按 post_tags 全量校准标签使用次数（排除软删除的文章）。
-// 启动时执行一次，幂等；以后新增/删除文章接口若漏了维护计数，重启即可自愈。
+// syncTagUsageCounts 全量校准标签使用次数，启动时执行。
 func syncTagUsageCounts(db *gorm.DB) error {
 	err := db.Exec(`
 		UPDATE tags SET usage_count = (
@@ -208,8 +194,7 @@ func syncTagUsageCounts(db *gorm.DB) error {
 	return nil
 }
 
-// CreateUser 创建用户并决定角色：库里还没有用户时，第一个用户是 admin。
-// 计数与插入放在同一个事务里，并用 mu 串行化，避免两个并发注册都成为 admin。
+// CreateUser 首个用户设为 admin，计数与插入在同一事务内。
 func (d *Data) CreateUser(name string, hash string) (User, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -235,7 +220,7 @@ func (d *Data) CreateUser(name string, hash string) (User, error) {
 	return user, nil
 }
 
-// UpdateUserAvatar 更新头像 data URL（空字符串表示清除）。
+// UpdateUserAvatar 更新头像，空串表示清除。
 func (d *Data) UpdateUserAvatar(id uint, avatar string) error {
 	if err := d.DB.Model(&User{}).Where("id = ?", id).Update("avatar", avatar).Error; err != nil {
 		return fmt.Errorf("更新用户[%d]头像失败：%w", id, err)

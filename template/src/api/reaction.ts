@@ -1,6 +1,5 @@
 import http, { type ApiResponse } from "./http";
 
-// 与 Go 端 ReactionType 对齐
 export type ReactionType =
   | "like"
   | "dislike"
@@ -11,7 +10,6 @@ export type ReactionType =
   | "rocket"
   | "eyes";
 
-// 与 Go 端 ReactionSummary 对齐
 export interface ReactionSummary {
   like: number;
   dislike: number;
@@ -30,14 +28,14 @@ export interface ReactionOption {
   label: string;
 }
 
-// 三个主反应常驻在文章底部
+// 主反应。
 export const PRIMARY_REACTIONS: ReactionOption[] = [
   { type: "like", emoji: "👍", label: "赞" },
   { type: "dislike", emoji: "👎", label: "踩" },
   { type: "question", emoji: "❓", label: "疑问" },
 ];
 
-// GitHub 风格的额外表情（收在「更多」面板里）
+// 额外表情。
 export const EMOJI_REACTIONS: ReactionOption[] = [
   { type: "laugh", emoji: "😄", label: "开心" },
   { type: "hooray", emoji: "🎉", label: "庆祝" },
@@ -46,7 +44,6 @@ export const EMOJI_REACTIONS: ReactionOption[] = [
   { type: "eyes", emoji: "👀", label: "围观" },
 ];
 
-// 从汇总里取某个反应的计数
 export function reactionCount(summary: ReactionSummary | undefined, type: ReactionType): number {
   if (!summary) return 0;
   if (type === "like") return summary.like;
@@ -55,7 +52,7 @@ export function reactionCount(summary: ReactionSummary | undefined, type: Reacti
   return summary.emoji?.[type] ?? 0;
 }
 
-// 切换反应 POST /api/post/:id/reaction（再次点击取消）
+// 切换反应，再次点击取消。
 export async function toggleReaction(postId: number, type: ReactionType): Promise<ReactionResult> {
   const { data } = await http.post<ApiResponse<ReactionResult>>(`/post/${postId}/reaction`, { type });
   if (!data.success || !data.data) {

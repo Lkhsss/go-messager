@@ -92,7 +92,7 @@ const hotOnly = computed(() => hotTags.value.slice(0, HOT_LIMIT))
 const hasMore = computed(() => hotTags.value.length > HOT_LIMIT)
 const sourceTags = computed(() => (expanded.value || keyword.value.trim() ? listTags.value : hotOnly.value))
 
-// 已参与筛选/选择的标签，即使不在热门列表里也要显示，避免用户看不到自己的条件
+// 已选标签即使不在热门列表也显示。
 const activeIds = computed(() => [...props.includeIds, ...props.excludeIds, ...props.selectedIds])
 
 const displayTags = computed(() => {

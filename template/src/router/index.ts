@@ -2,18 +2,18 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useSystemStore } from "@/stores/system";
 
-// 路由 meta 字段的类型声明（vue-router 默认未声明这些字段）
+// 路由 meta 字段。
 declare module "vue-router" {
   interface RouteMeta {
-    // 不套用带侧边栏的主布局
+    // 使用空白布局。
     layout?: "blank";
-    // 未登录不可访问
+    // 需要登录。
     requiresAuth?: boolean;
-    // 已登录时不可访问（如登录页）
+    // 仅游客。
     guestOnly?: boolean;
-    // 只在系统未初始化（还没有第一个用户）时可访问
+    // 仅未初始化时。
     setupOnly?: boolean;
-    // 仅管理员可访问
+    // 仅管理员。
     requiresAdmin?: boolean;
   }
 }
@@ -87,21 +87,13 @@ const router = createRouter({
       component: () => import("@/views/SettingView.vue"),
       meta: { requiresAuth: true },
     },
-    // {
-    //   path: '/about',
-    //   name: 'about',
-    //   // route level code-splitting
-    //   // this generates a separate chunk (About.[hash].js) for this route
-    //   // which is lazy-loaded when the route is visited.
-    //   component: () => import('../views/AboutView.vue'),
-    // },
   ],
 });
 
 router.beforeEach(async (to) => {
   const system = useSystemStore();
 
-  // 1. 系统还没创建第一个用户：只允许访问初始化页
+  // 未初始化时只允许 setup。
   const initialized = await system.ensureInitialized();
   if (!initialized) {
     return to.name === "setup" ? true : { name: "setup" };
@@ -110,11 +102,11 @@ router.beforeEach(async (to) => {
     return { name: "login" };
   }
 
-  // 2. 有 token 时校验一次（角色以服务端为准），同时同步多标签页登录态
+  // 校验 token 并同步登录态。
   const auth = useAuthStore();
   await auth.ensureSession();
 
-  // 已登录用户不需要再看登录页
+  // 已登录跳过登录页。
   if (to.meta.guestOnly && auth.isLoggedIn) {
     return { name: "home" };
   }
@@ -123,7 +115,7 @@ router.beforeEach(async (to) => {
     return { name: "login", query: { redirect: to.fullPath } };
   }
 
-  // 非管理员不能进管理页（未登录的情况上面已重定向到登录页）
+  // 非管理员不能进管理页。
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return { name: "home" };
   }
@@ -132,8 +124,3 @@ router.beforeEach(async (to) => {
 });
 
 export default router;
-
-
-
-
-

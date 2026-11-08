@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// AuthResult 登录/注册成功后返回的令牌与用户信息
+// AuthResult 登录/注册结果。
 type AuthResult struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -34,7 +34,7 @@ func (d *Data) Authorize(c *gin.Context) {
 
 	user, err := d.GetUserByName(req.Name)
 	if err != nil {
-		// 用户不存在也返回 401，避免账号枚举
+		// 不暴露账号是否存在。
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 			return
@@ -43,8 +43,7 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 先校验密码，再判断账号是否停用：否则可以用 403 探测某个用户名是否存在
-	// CompareHashAndPassword(hashedPassword, plainPassword)
+	// 先校验密码再判断停用，避免用 403 探测用户。
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
@@ -61,7 +60,7 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 登录次数只做统计，更新失败不影响正常登录
+	// 统计失败不影响登录。
 	if err := d.DB.Model(&user).Updates(map[string]any{
 		"login_count":   gorm.Expr("login_count + 1"),
 		"last_login_at": time.Now(),
@@ -75,8 +74,7 @@ func (d *Data) Authorize(c *gin.Context) {
 	})
 }
 
-// Register 注册 POST /api/register
-// 库里还没有用户时，第一个注册的人是 admin；之后都是 user。
+// Register 首个用户自动成为 admin。
 func (d *Data) Register(c *gin.Context) {
 	var req RegisterInput
 	if err := c.ShouldBind(&req); err != nil {
@@ -112,7 +110,7 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	// 注册后直接登录，省掉一次登录请求
+	// 注册后直接签发 token。
 	token, expiresAt, err := d.issueToken(user)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "TOKEN_FAILED", err.Error())
@@ -126,8 +124,7 @@ func (d *Data) Register(c *gin.Context) {
 	})
 }
 
-// Me 获取当前登录用户 GET /api/me
-// 前端启动时用它校验本地 token 是否有效，并刷新角色（角色以服务端为准）。
+// Me 当前用户，前端用来校验本地 token。
 func (d *Data) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {

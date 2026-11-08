@@ -224,7 +224,7 @@ function goTo(next: number) {
       </router-link>
     </div>
 
-    <!-- 标签筛选：折叠时展示一排热门标签，支持搜索；点击三态循环 -->
+    <!-- 标签筛选 -->
     <section class="mb-6 space-y-2">
       <TagPicker mode="filter" :include-ids="includeIds" :exclude-ids="excludeIds" @toggle="toggleTag" />
 

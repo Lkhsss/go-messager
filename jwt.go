@@ -14,16 +14,14 @@ const jwtIssuer = "go-messager"
 
 var errInvalidToken = errors.New("无效的令牌")
 
-// Claims 是 token 里携带的信息。
-// Subject 存用户 ID（改名不影响身份），Name/Role 只是方便前端展示；
-// 真正的权限判断以数据库为准，见 AuthRequired。
+// Claims token 信息，权限仍以数据库为准。
 type Claims struct {
 	Name string `json:"name"`
 	Role Role   `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// issueToken 为用户签发 HS256 token，同时返回过期时间供前端保存。
+// issueToken 签发 HS256 token。
 func (d *Data) issueToken(user User) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(d.JWTTTL)
@@ -48,8 +46,7 @@ func (d *Data) issueToken(user User) (string, time.Time, error) {
 	return token, expiresAt, nil
 }
 
-// parseToken 校验签名、签发者与有效期。
-// 限定 HS256，避免 alg 混淆攻击（例如伪造 alg=none）。
+// parseToken 校验签名、签发者和有效期，只接受 HS256。
 func (d *Data) parseToken(raw string) (*Claims, error) {
 	claims := &Claims{}
 	_, err := jwt.ParseWithClaims(raw, claims, func(*jwt.Token) (any, error) {
@@ -70,7 +67,6 @@ func (d *Data) parseToken(raw string) (*Claims, error) {
 	return claims, nil
 }
 
-// userIDFromClaims 把 subject 解析成用户 ID。
 func userIDFromClaims(claims *Claims) (uint, error) {
 	id, err := strconv.ParseUint(claims.Subject, 10, 64)
 	if err != nil {
@@ -80,7 +76,7 @@ func userIDFromClaims(claims *Claims) (uint, error) {
 	return uint(id), nil
 }
 
-// bearerToken 从 Authorization 头中取出 Bearer token，大小写不敏感。
+// bearerToken 解析 Authorization 头。
 func bearerToken(header string) (string, bool) {
 	const prefix = "bearer "
 

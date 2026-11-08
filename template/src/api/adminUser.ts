@@ -3,7 +3,7 @@ import type { MyStats } from "./stats";
 
 export type AdminUserRole = "admin" | "user" | "none";
 
-// 与 Go 端 handler_admin_user.go 的 AdminUserListItem 对齐
+// 对应 Go 端 AdminUserListItem。
 export interface AdminUserItem {
   id: number;
   name: string;
@@ -23,7 +23,6 @@ export interface AdminUserItem {
 
 export interface AdminUserDetail {
   user: AdminUserItem;
-  // 与 /api/me/stats 完全相同的统计口径
   stats: MyStats;
 }
 
@@ -38,7 +37,7 @@ export interface AdminUserListResult {
   meta: PaginationMeta;
 }
 
-// 用户列表 GET /api/admin/users?page=1&per_page=20&q=name
+// 用户列表。
 export async function fetchAdminUsers({
   page = 1,
   perPage = 10,
@@ -67,7 +66,6 @@ export async function fetchAdminUsers({
   };
 }
 
-// 用户详情 GET /api/admin/users/:id
 export async function fetchAdminUserDetail(id: number): Promise<AdminUserDetail> {
   const { data } = await http.get<ApiResponse<AdminUserDetail>>(`/admin/users/${id}`);
   if (!data.success || !data.data) {
@@ -76,7 +74,7 @@ export async function fetchAdminUserDetail(id: number): Promise<AdminUserDetail>
   return data.data;
 }
 
-// 封禁/解封 PATCH /api/admin/users/:id/status
+// 封禁/解封。
 export async function setAdminUserDisabled(id: number, disabled: boolean): Promise<AdminUserItem> {
   const { data } = await http.patch<ApiResponse<AdminUserItem>>(`/admin/users/${id}/status`, {
     disabled,
@@ -87,7 +85,7 @@ export async function setAdminUserDisabled(id: number, disabled: boolean): Promi
   return data.data;
 }
 
-// 修改密码 PUT /api/admin/users/:id/password
+// 修改密码。
 export async function changeAdminUserPassword(id: number, password: string): Promise<void> {
   const { data } = await http.put<ApiResponse<{ id: number }>>(`/admin/users/${id}/password`, {
     password,
@@ -97,8 +95,7 @@ export async function changeAdminUserPassword(id: number, password: string): Pro
   }
 }
 
-// 删除账号 DELETE /api/admin/users/:id
-// 后端只软删除账号，文章和评论会保留。
+// 软删除账号，文章和评论保留。
 export async function deleteAdminUser(id: number): Promise<void> {
   const { data } = await http.delete<ApiResponse<{ id: number }>>(`/admin/users/${id}`);
   if (!data.success) {

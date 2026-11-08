@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type LeaderboardEntry struct {
@@ -26,8 +25,7 @@ type leaderboardRow struct {
 	Count  int64
 }
 
-// GetLeaderboard 点赞/点踩/疑问排行榜 GET /api/leaderboard?period=week
-// period: day / week / month / year；只统计原文，不统计评论。
+// GetLeaderboard 点赞/点踩/疑问排行，只统计原文。
 func (d *Data) GetLeaderboard(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -154,5 +152,3 @@ func (d *Data) leaderboardEntries(rows []leaderboardRow) ([]LeaderboardEntry, er
 	}
 	return entries, nil
 }
-
-var _ = gorm.ErrRecordNotFound

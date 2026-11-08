@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Response is the standard API envelope.
+// Response 统一响应结构。
 type Response struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
@@ -31,7 +31,7 @@ func (r Response) Ok(c *gin.Context, status int, data any) {
 	})
 }
 
-// OkWithMeta 返回带分页元信息（页码/每页数量/总数/总页数）的成功响应
+// OkWithMeta 带分页信息的成功响应
 func (r Response) OkWithMeta(c *gin.Context, status int, data any, meta *Meta) {
 	c.JSON(status, Response{
 		Success: true,
