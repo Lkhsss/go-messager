@@ -95,10 +95,6 @@ func CurrentUser(c *gin.Context) (User, bool) {
 	return user, ok
 }
 
-// minGzipLength 是启用压缩的最小响应体字节数。
-// 更小的响应经 gzip 压缩后往往反而更大，直接原样返回。
-const minGzipLength = 1024
-
 // gzipExcludedExtensions 是本身已压缩、再 gzip 没有收益的扩展名。
 // 注意：WithExcludedExtensions 会替换库的默认排除表，所以 png/jpg/gif/jpeg 也要显式列出。
 var gzipExcludedExtensions = []string{
@@ -108,12 +104,15 @@ var gzipExcludedExtensions = []string{
 
 // gzipCompression 返回全局 gzip 压缩中间件：
 //   - 仅当请求头带 Accept-Encoding: gzip 时压缩，并返回 Vary: Accept-Encoding；
-//   - 小于 minGzipLength 的响应不压缩；
 //   - 头像接口直接返回 JPEG/PNG，按路径前缀排除，避免无意义的二次压缩。
+//
+// 这里刻意不使用 gzip.WithMinLength：gin-contrib/gzip v1.2.9 在
+// 「Content-Length < minLength」时会直接写明文，随后才删除 Content-Encoding，
+// 而写明文时响应头已经发出（gin 的 c.Data 会设置 Content-Length），
+// 客户端就会收到「声明 gzip、body 是明文」的响应并解码失败（Web UI 白屏）。
 func gzipCompression() gin.HandlerFunc {
 	return gzip.Gzip(
 		gzip.DefaultCompression,
-		gzip.WithMinLength(minGzipLength),
 		gzip.WithExcludedExtensions(gzipExcludedExtensions),
 		gzip.WithExcludedPaths([]string{"/api/avatar"}),
 	)

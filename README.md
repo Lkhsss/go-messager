@@ -32,9 +32,9 @@ Copy-Item conf/app.example.ini conf/app.ini
 后端默认开启 gzip 压缩（`gin-contrib/gzip`），对 API JSON 与嵌入的前端静态资源都生效：
 
 - 仅当请求头带 `Accept-Encoding: gzip` 时压缩，并返回 `Vary: Accept-Encoding`；
-- 响应体小于 1KB 不压缩，避免小 JSON 因 gzip 头反而变大；
 - `/api/avatar` 以及 `.png`/`.jpg`/`.webp`/`.woff2` 等已压缩内容不重复压缩；
-- 4xx/5xx 与无 body 的响应（204/304）不压缩。
+- 4xx/5xx 与无 body 的响应（204/304）不压缩；
+- 不使用 `WithMinLength`：该选项在 `gin-contrib/gzip v1.2.9` 中会让 `c.Data` 的小响应出现「声明 gzip、body 明文」，浏览器解码失败。
 
 压缩级别与排除规则在 `middleware.go` 的 `gzipCompression()` 中调整。
 

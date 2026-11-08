@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// gzipTestBody 超过 minGzipLength（4096 字节），确保会触发压缩。
+// gzipTestBody 是较大的响应体（4096 字节），用于验证压缩。
 var gzipTestBody = strings.Repeat("gzip middleware ", 256)
 
 // newGzipTestRouter 构造只挂 gzip 中间件的测试路由，不依赖数据库。
@@ -92,14 +92,75 @@ func TestGzipSkippedWithoutAcceptEncoding(t *testing.T) {
 	}
 }
 
-func TestGzipSkipsSmallResponse(t *testing.T) {
+// 小响应同样要压缩：一旦使用 gzip.WithMinLength，gin 的 c.Data（静态文件）
+// 会因为 Content-Length 触发库的明文直写分支，导致「声明 gzip、body 明文」。
+func TestGzipCompressesSmallResponse(t *testing.T) {
 	w := serveGzip(t, newGzipTestRouter(), "/api/small", "gzip")
 
-	if got := w.Header().Get("Content-Encoding"); got != "" {
-		t.Fatalf("小于 %d 字节的响应不应压缩，实际 Content-Encoding=%q", minGzipLength, got)
+	if got := w.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("小响应也应使用 gzip 压缩，实际 Content-Encoding=%q", got)
 	}
-	if got := w.Body.String(); !strings.Contains(got, `"ok":true`) {
-		t.Fatalf("小响应内容异常：%q", got)
+
+	reader, err := gzip.NewReader(bytes.NewReader(w.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("响应不是合法的 gzip 数据：%v", err)
+	}
+	defer reader.Close()
+
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("解压响应失败：%v", err)
+	}
+	if !strings.Contains(string(body), `"ok":true`) {
+		t.Fatalf("解压后的小响应内容异常：%q", string(body))
+	}
+}
+
+// TestGzipCompressesSmallDataOnRealServer 覆盖真实 net/http 行为：
+// gin 的 c.Data 会设置 Content-Length，曾经配合 WithMinLength 会产生
+// 「Content-Encoding: gzip + 明文 body」的错误响应（Web UI 白屏）。
+func TestGzipCompressesSmallDataOnRealServer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	payload := strings.Repeat("a", 793) // 与 index.html 体积接近
+	r := gin.New()
+	r.Use(gzipCompression())
+	r.GET("/", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(payload))
+	})
+
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/", nil)
+	if err != nil {
+		t.Fatalf("构造请求失败：%v", err)
+	}
+	// 手动设置 Accept-Encoding：DefaultTransport 不会自动解压
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("请求失败：%v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("应返回 gzip 压缩，实际 Content-Encoding=%q", got)
+	}
+
+	reader, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("响应体不是合法的 gzip 数据：%v", err)
+	}
+	defer reader.Close()
+
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("解压响应失败：%v", err)
+	}
+	if string(body) != payload {
+		t.Fatalf("解压后内容不一致：len=%d，期望 %d", len(body), len(payload))
 	}
 }
 
