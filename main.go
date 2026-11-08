@@ -43,6 +43,9 @@ func main() {
 
 	r := gin.Default()
 
+	// 全局 gzip：API JSON 与嵌入的前端静态资源都会按需压缩
+	r.Use(gzipCompression())
+
 	log.Printf("数据库文件：%s", cfg.Database.Path)
 
 	db, err := openDatabase(cfg.Database.Path)

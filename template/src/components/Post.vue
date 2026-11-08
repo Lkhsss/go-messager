@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import type { TagItem } from '@/api/tag'
 import type { ReactionSummary, ReactionType } from '@/api/reaction'
 import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderEmojiText, renderMarkdown } from '@/utils/markdown'
+import { renderEmojiText } from '@/utils/emoji'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
+
+// 正文 Markdown 与代码高亮体量大，异步加载：列表页只需要 emoji 替换
+const MarkdownContent = defineAsyncComponent(() => import('@/components/MarkdownContent.vue'))
 
 const props = defineProps<{
   postId: number
@@ -33,7 +36,6 @@ defineEmits<{
 
 const renderedTitle = computed(() => renderEmojiText(props.title))
 const renderedSubtitle = computed(() => renderEmojiText(props.subtitle))
-const renderedBody = computed(() => renderMarkdown(props.body ?? ''))
 const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
 </script>
 
@@ -64,7 +66,7 @@ const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
         <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
       </div>
 
-      <div v-if="detail" class="markdown-body text-sm text-base-content/80" v-html="renderedBody"></div>
+      <MarkdownContent v-if="detail" :source="body ?? ''" class="text-sm text-base-content/80" />
       <p v-else-if="excerpt" class="whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
 
       <div v-if="!detail" class="flex justify-end">

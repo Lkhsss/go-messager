@@ -5,7 +5,7 @@ import Pagination from '@/components/Pagination.vue'
 import { deletePost, fetchMyPosts, setPostPrivate, type PostItem } from '@/api/post'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderEmojiText } from '@/utils/markdown'
+import { renderEmojiText } from '@/utils/emoji'
 import { useAuthStore } from '@/stores/auth'
 
 const PER_PAGE = 10

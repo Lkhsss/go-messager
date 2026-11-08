@@ -8,7 +8,7 @@ import type { TagItem } from '@/api/tag'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderEmojiText } from '@/utils/markdown'
+import { renderEmojiText } from '@/utils/emoji'
 import { useAuthStore } from '@/stores/auth'
 
 const POSTS_PER_PAGE = 10

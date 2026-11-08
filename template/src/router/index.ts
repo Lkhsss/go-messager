@@ -1,14 +1,4 @@
 import { createRouter, createWebHistory } from "vue-router";
-import HomeView from "../views/HomeView.vue";
-import SettingView from "@/views/SettingView.vue";
-import LoginView from "@/views/LoginView.vue";
-import SetupView from "@/views/SetupView.vue";
-import PostCreateView from "@/views/PostCreateView.vue";
-import MyPostsView from "@/views/MyPostsView.vue";
-import DataView from "@/views/DataView.vue";
-import LeaderboardView from "@/views/LeaderboardView.vue";
-import PostDetailView from "@/views/PostDetailView.vue";
-import AdminView from "@/views/AdminView.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useSystemStore } from "@/stores/system";
 
@@ -34,70 +24,67 @@ const router = createRouter({
     {
       path: "/setup",
       name: "setup",
-      component: SetupView,
+      component: () => import("@/views/SetupView.vue"),
       meta: { layout: "blank", setupOnly: true },
     },
     {
       path: "/login",
       name: "login",
-      component: LoginView,
+      component: () => import("@/views/LoginView.vue"),
       meta: { layout: "blank", guestOnly: true },
     },
     {
       path: "/",
       name: "home",
-      component: HomeView,
+      component: () => import("@/views/HomeView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/post/new",
       name: "post-new",
-      component: PostCreateView,
+      component: () => import("@/views/PostCreateView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/post/:id",
       name: "post-detail",
-      component: PostDetailView,
+      component: () => import("@/views/PostDetailView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/my-posts",
       name: "my-posts",
-      component: MyPostsView,
+      component: () => import("@/views/MyPostsView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/post/:id/edit",
       name: "post-edit",
-      component: PostCreateView,
+      component: () => import("@/views/PostCreateView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/leaderboard",
       name: "leaderboard",
-      component: LeaderboardView,
+      component: () => import("@/views/LeaderboardView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/data",
       name: "data",
-      component: DataView,
+      component: () => import("@/views/DataView.vue"),
       meta: { requiresAuth: true },
     },
     {
       path: "/admin",
       name: "admin",
-      component: AdminView,
+      component: () => import("@/views/AdminView.vue"),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: "/setting",
       name: "setting",
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
-      component: SettingView,
+      component: () => import("@/views/SettingView.vue"),
       meta: { requiresAuth: true },
     },
     // {

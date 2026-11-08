@@ -1,7 +1,7 @@
+import "highlight.js/styles/github-dark.css";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import { full as fullEmoji } from "markdown-it-emoji";
-import emojiDefinitions from "markdown-it-emoji/lib/data/full.mjs";
 import hljs from "highlight.js/lib/core";
 
 import bash from "highlight.js/lib/languages/bash";
@@ -177,17 +177,6 @@ md.renderer.rules.code_block = (tokens, idx) => {
 
   return renderMockupCode(token.content, "");
 };
-
-const EMOJI_SHORTCODE_RE = /:([a-z0-9_+-]+):/g;
-
-// 标题、副标题、摘要只做 emoji 替换，不启用 Markdown，避免改变原有纯文本语义。
-export function renderEmojiText(source: string): string {
-  if (!source || !source.includes(":")) return source;
-
-  return source.replace(EMOJI_SHORTCODE_RE, (match, name: string) => {
-    return emojiDefinitions[name.toLowerCase()] ?? match;
-  });
-}
 
 export function renderMarkdown(source: string): string {
   const html = md.render(source ?? "");

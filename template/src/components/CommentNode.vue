@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import type { CommentItem } from '@/api/post'
 import { createComment } from '@/api/post'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError } from '@/api/http'
-import { renderMarkdown } from '@/utils/markdown'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 import { useAuthStore } from '@/stores/auth'
+
+// 评论正文同样按需加载 Markdown 渲染链路
+const MarkdownContent = defineAsyncComponent(() => import('@/components/MarkdownContent.vue'))
 
 defineOptions({ name: 'CommentNode' })
 
@@ -33,8 +35,6 @@ const replyBody = ref('')
 const submitting = ref(false)
 const reacting = ref(false)
 const errorMsg = ref('')
-
-const renderedBody = computed(() => renderMarkdown(props.comment.body ?? ''))
 
 function formatDate(value: string): string {
   const date = new Date(value)
@@ -92,7 +92,7 @@ async function onReact(type: ReactionType) {
       </div>
     </header>
 
-    <div class="markdown-body mt-2 text-sm text-base-content/80" v-html="renderedBody"></div>
+    <MarkdownContent :source="comment.body ?? ''" class="mt-2 text-sm text-base-content/80" />
 
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <ReactionBar :reactions="comment.reactions" :my-reactions="comment.my_reactions" :busy="reacting"

@@ -4,7 +4,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import { fetchLeaderboard, type LeaderboardData, type LeaderboardEntry, type LeaderboardPeriod } from '@/api/leaderboard'
 import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderEmojiText } from '@/utils/markdown'
+import { renderEmojiText } from '@/utils/emoji'
 
 type LeaderboardType = 'like' | 'dislike' | 'question'
 
