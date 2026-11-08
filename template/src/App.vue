@@ -86,7 +86,7 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>
         </div>
       </nav>
-      <div class="flex-1">
+      <div class="flex flex-1 flex-col">
         <RouterView />
       </div>
       <SiteFooter />

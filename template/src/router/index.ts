@@ -87,6 +87,13 @@ const router = createRouter({
       component: () => import("@/views/SettingView.vue"),
       meta: { requiresAuth: true },
     },
+    {
+      // 未知路径统一显示 404 界面（必须放在最后）。
+      path: "/:pathMatch(.*)*",
+      name: "not-found",
+      component: () => import("@/views/NotFoundView.vue"),
+      meta: { requiresAuth: true },
+    },
   ],
 });
 
