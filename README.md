@@ -4,6 +4,19 @@ v0.2.3
 
 Go语言制作的极简论坛
 
+## 界面预览
+
+<table>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/home.png" alt="首页" width="420"></td>
+    <td valign="top"><img src="docs/screenshots/post.png" alt="文章详情" width="420"></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/leaderboard.png" alt="排行榜" width="420"></td>
+    <td valign="top"><img src="docs/screenshots/admin.png" alt="管理后台" width="420"></td>
+  </tr>
+</table>
+
 ## 配置
 
 默认读取 `conf/app.ini`（已在 `.gitignore` 中，不提交）。首次使用复制最小配置：

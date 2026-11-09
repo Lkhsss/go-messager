@@ -21,3 +21,6 @@ template/.vscode
 
 # 本地配置，构建时使用 conf/app.min.ini
 conf/app.ini
+
+# 文档与截图
+docs/
