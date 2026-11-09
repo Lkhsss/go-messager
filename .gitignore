@@ -6,3 +6,6 @@ data/
 
 # CI 运行时生成的 BuildKit 配置
 .buildx/
+
+# 本地配置（含密钥，不入库）
+/conf/app.ini

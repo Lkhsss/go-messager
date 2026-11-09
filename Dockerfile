@@ -70,8 +70,8 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 COPY --from=backend /out/go-messager /usr/local/bin/go-messager
 
-# 配置文件在 /conf/app.ini。
-COPY conf/ /conf/
+# 配置文件在 /conf/app.ini，来自最小配置。
+COPY conf/app.min.ini /conf/app.ini
 
 # 数据库默认 /data/data.db。
 WORKDIR /

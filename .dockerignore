@@ -18,3 +18,6 @@ template/.vscode
 # 系统文件
 **/.DS_Store
 **/Thumbs.db
+
+# 本地配置，构建时使用 conf/app.min.ini
+conf/app.ini

@@ -24,8 +24,8 @@ func main() {
 		panic(fmt.Errorf("加载配置失败：%w", err))
 	}
 
-	// GIN_MODE 优先，未设置时用配置。
-	if cfg.Server.Mode != "" && strings.TrimSpace(os.Getenv("GIN_MODE")) == "" {
+	// GIN_MODE 优先；未设置时用配置，默认 release。
+	if strings.TrimSpace(os.Getenv("GIN_MODE")) == "" {
 		gin.SetMode(cfg.Server.Mode)
 	}
 

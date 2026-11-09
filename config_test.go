@@ -25,8 +25,8 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if cfg.Server.Port != defaultServerPort {
 		t.Fatalf("port 默认值应为 %d，实际 %d", defaultServerPort, cfg.Server.Port)
 	}
-	if cfg.Server.Mode != "" {
-		t.Fatalf("mode 默认值应为空，实际 %q", cfg.Server.Mode)
+	if cfg.Server.Mode != gin.ReleaseMode {
+		t.Fatalf("mode 默认值应为 release，实际 %q", cfg.Server.Mode)
 	}
 	if cfg.Database.Path != filepath.Join("data", "data.db") {
 		t.Fatalf("数据库默认路径异常：%s", cfg.Database.Path)
@@ -98,7 +98,7 @@ ttl =
 		t.Fatalf("加载配置失败：%v", err)
 	}
 
-	if cfg.Server.Host != "" || cfg.Server.Port != defaultServerPort || cfg.Server.Mode != "" {
+	if cfg.Server.Host != "" || cfg.Server.Port != defaultServerPort || cfg.Server.Mode != gin.ReleaseMode {
 		t.Fatalf("空 server 配置应回退默认值：%+v", cfg.Server)
 	}
 	if cfg.Database.Path != filepath.Join("data", "data.db") {
@@ -182,7 +182,7 @@ func TestEnsureDatabaseDir(t *testing.T) {
 }
 
 func TestShippedConfigFiles(t *testing.T) {
-	for _, path := range []string{"conf/app.ini", "conf/app.example.ini"} {
+	for _, path := range []string{"conf/app.min.ini", "conf/app.example.ini"} {
 		if _, err := LoadConfig(path); err != nil {
 			t.Errorf("加载仓库配置文件[%s]失败：%v", path, err)
 		}

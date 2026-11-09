@@ -20,6 +20,8 @@ const (
 	defaultConfigPath = "conf/app.ini"
 	// 默认端口。
 	defaultServerPort = 8080
+	// 默认运行模式。
+	defaultServerMode = gin.ReleaseMode
 )
 
 // Config 应用配置。
@@ -34,7 +36,7 @@ type ServerConfig struct {
 	// 留空时 debug 监听 127.0.0.1，其他模式监听 0.0.0.0。
 	Host string
 	Port int
-	// debug/release/test，留空用 GIN_MODE。
+	// debug/release/test，留空默认 release；GIN_MODE 优先。
 	Mode string
 }
 
@@ -55,6 +57,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Port: defaultServerPort,
+			Mode: defaultServerMode,
 		},
 		Database: DatabaseConfig{
 			Path: filepath.Join("data", "data.db"),
@@ -95,7 +98,9 @@ func LoadConfig(path string) (*Config, error) {
 
 	mode := strings.ToLower(strings.TrimSpace(f.Section("server").Key("mode").String()))
 	switch mode {
-	case "", gin.DebugMode, gin.ReleaseMode, gin.TestMode:
+	case "":
+		// 留空时保持默认 release。
+	case gin.DebugMode, gin.ReleaseMode, gin.TestMode:
 		cfg.Server.Mode = mode
 	default:
 		return nil, fmt.Errorf("配置项 [server] mode 无效[%s]：可选 debug、release、test", mode)

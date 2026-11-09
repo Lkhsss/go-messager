@@ -6,28 +6,28 @@ Go语言制作的极简论坛
 
 ## 配置
 
-默认读取进程工作目录下的 `conf/app.ini`。首次使用可复制示例：
+默认读取 `conf/app.ini`（已在 `.gitignore` 中，不提交）。首次使用复制最小配置：
 
 ```bash
-cp conf/app.example.ini conf/app.ini
+cp conf/app.min.ini conf/app.ini
 ```
 
-Windows PowerShell：
+需要完整注释示例时，把 `app.min.ini` 换成 `app.example.ini`。Windows PowerShell：
 
 ```powershell
-Copy-Item conf/app.example.ini conf/app.ini
+Copy-Item conf/app.min.ini conf/app.ini
 ```
 
 默认值：
 
-| 配置项          | 默认值           | 说明                                              |
-| --------------- | ---------------- | ------------------------------------------------- |
-| `server.host`   | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`    |
-| `server.port`   | `8080`           | HTTP 端口                                         |
-| `server.mode`   | 空               | `debug` / `release` / `test`，留空使用 `GIN_MODE` |
-| `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                     |
-| `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成              |
-| `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                            |
+| 配置项          | 默认值           | 说明                                                              |
+| --------------- | ---------------- | ----------------------------------------------------------------- |
+| `server.host`   | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                    |
+| `server.port`   | `8080`           | HTTP 端口                                                         |
+| `server.mode`   | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先 |
+| `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                                     |
+| `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                              |
+| `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                                            |
 
 后端默认开启 gzip 压缩（`gin-contrib/gzip`），对 API JSON 与嵌入的前端静态资源都生效：
 
@@ -38,7 +38,7 @@ Copy-Item conf/app.example.ini conf/app.ini
 
 压缩级别与排除规则在 `middleware.go` 的 `gzipCompression()` 中调整。
 
-JWT 相关环境变量优先级高于配置文件。Docker 部署时配置文件位于 `/conf/app.ini`，数据库位于 `/data/data.db`，持久化挂载 `/data`：
+JWT 相关环境变量优先级高于配置文件。Docker 镜像用 `conf/app.min.ini` 生成 `/conf/app.ini`，数据库位于 `/data/data.db`，持久化挂载 `/data`。需要自定义配置时挂载 `/conf/app.ini`。
 
 ```bash
 docker run -d --name go-messager -p 8080:8080 \
@@ -108,9 +108,9 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 10. [x] md 短emoji
 11. [x] 404界面
 12. [ ] 公告和维护模式
-13. [ ] 配置读取逻辑优化
+13. [x] 配置读取逻辑优化
 14. [ ] 隐私模式和公开模式
-15. [ ] 最小配置/docker配置
+15. [x] 最小配置/docker配置
 
 # FIXME
 
