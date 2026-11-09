@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.2.3
+v0.3.0
 
 Go语言制作的极简论坛
 
@@ -33,15 +33,15 @@ Copy-Item conf/app.min.ini conf/app.ini
 
 默认值：
 
-| 配置项          | 默认值           | 说明                                                              |
-| --------------- | ---------------- | ----------------------------------------------------------------- |
-| `server.host`   | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                    |
-| `server.port`   | `8080`           | HTTP 端口                                                         |
-| `server.mode`   | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先 |
+| 配置项          | 默认值           | 说明                                                                        |
+| --------------- | ---------------- | --------------------------------------------------------------------------- |
+| `server.host`   | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                              |
+| `server.port`   | `8080`           | HTTP 端口                                                                   |
+| `server.mode`   | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先           |
 | `access.mode`   | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
-| `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                                     |
-| `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                              |
-| `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                                            |
+| `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
+| `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
+| `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                                                      |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
