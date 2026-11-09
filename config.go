@@ -22,11 +22,19 @@ const (
 	defaultServerPort = 8080
 	// 默认运行模式。
 	defaultServerMode = gin.ReleaseMode
+
+	// 站点访问模式：所有页面和操作必须登录。
+	AccessModePrivate = "private"
+	// 站点访问模式：游客可浏览文章，写操作需要登录。
+	AccessModePublic = "public"
+	// 默认访问模式。
+	defaultAccessMode = AccessModePrivate
 )
 
 // Config 应用配置。
 type Config struct {
 	Server   ServerConfig
+	Access   AccessConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
 }
@@ -37,6 +45,13 @@ type ServerConfig struct {
 	Host string
 	Port int
 	// debug/release/test，留空默认 release；GIN_MODE 优先。
+	Mode string
+}
+
+// AccessConfig 站点访问控制。
+type AccessConfig struct {
+	// private：所有页面和操作必须登录（默认）；
+	// public：游客可浏览文章，写文章/互动/评论需要登录。
 	Mode string
 }
 
@@ -58,6 +73,9 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Port: defaultServerPort,
 			Mode: defaultServerMode,
+		},
+		Access: AccessConfig{
+			Mode: defaultAccessMode,
 		},
 		Database: DatabaseConfig{
 			Path: filepath.Join("data", "data.db"),
@@ -104,6 +122,16 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Server.Mode = mode
 	default:
 		return nil, fmt.Errorf("配置项 [server] mode 无效[%s]：可选 debug、release、test", mode)
+	}
+
+	accessMode := strings.ToLower(strings.TrimSpace(f.Section("access").Key("mode").String()))
+	switch accessMode {
+	case "":
+		// 留空时保持默认 private。
+	case AccessModePrivate, AccessModePublic:
+		cfg.Access.Mode = accessMode
+	default:
+		return nil, fmt.Errorf("配置项 [access] mode 无效[%s]：可选 private、public", accessMode)
 	}
 
 	if dbPath := strings.TrimSpace(f.Section("database").Key("path").String()); dbPath != "" {

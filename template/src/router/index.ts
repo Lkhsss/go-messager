@@ -15,6 +15,8 @@ declare module "vue-router" {
     setupOnly?: boolean;
     // 仅管理员。
     requiresAdmin?: boolean;
+    // 无需登录即可访问（如 401 提示页）。
+    allowAnonymous?: boolean;
   }
 }
 
@@ -37,7 +39,7 @@ const router = createRouter({
       path: "/",
       name: "home",
       component: () => import("@/views/HomeView.vue"),
-      meta: { requiresAuth: true },
+      // 公开模式下游客可浏览；隐私模式由全局守卫统一拦截。
     },
     {
       path: "/post/new",
@@ -49,7 +51,7 @@ const router = createRouter({
       path: "/post/:id",
       name: "post-detail",
       component: () => import("@/views/PostDetailView.vue"),
-      meta: { requiresAuth: true },
+      // 公开模式下游客可浏览；隐私模式由全局守卫统一拦截。
     },
     {
       path: "/my-posts",
@@ -67,7 +69,7 @@ const router = createRouter({
       path: "/leaderboard",
       name: "leaderboard",
       component: () => import("@/views/LeaderboardView.vue"),
-      meta: { requiresAuth: true },
+      // 公开模式下游客可浏览；隐私模式由全局守卫统一拦截。
     },
     {
       path: "/data",
@@ -88,11 +90,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: "/401",
+      name: "login-required",
+      component: () => import("@/views/LoginRequiredView.vue"),
+      // 隐私模式下也不能被守卫再次拦截。
+      meta: { allowAnonymous: true },
+    },
+    {
       // 未知路径统一显示 404 界面（必须放在最后）。
       path: "/:pathMatch(.*)*",
       name: "not-found",
       component: () => import("@/views/NotFoundView.vue"),
-      meta: { requiresAuth: true },
+      // 公开模式下游客可浏览；隐私模式由全局守卫统一拦截。
     },
   ],
 });
@@ -118,7 +127,18 @@ router.beforeEach(async (to) => {
     return { name: "home" };
   }
 
-  if (to.meta.requiresAuth && !auth.isLoggedIn) {
+  // 401 提示页无需登录；已登录用户不需要看它。
+  if (to.meta.allowAnonymous) {
+    return auth.isLoggedIn ? { name: "home" } : true;
+  }
+
+  // 隐私模式下除登录/初始化页外都要求登录；公开模式只拦截需要登录的页面。
+  const needsAuth = to.meta.requiresAuth || (!system.isPublic && !to.meta.guestOnly);
+  if (needsAuth && !auth.isLoggedIn) {
+    // 公开模式展示 401 页面，隐私模式保持直接跳登录页。
+    if (system.isPublic) {
+      return { name: "login-required", query: { redirect: to.fullPath } };
+    }
     return { name: "login", query: { redirect: to.fullPath } };
   }
 

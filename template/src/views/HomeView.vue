@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import Post from '@/components/Post.vue'
 import Pagination from '@/components/Pagination.vue'
 import TagPicker from '@/components/TagPicker.vue'
@@ -9,9 +10,13 @@ import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError, type PaginationMeta } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
 import { renderEmojiText } from '@/utils/emoji'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { useAuthStore } from '@/stores/auth'
 
 const POSTS_PER_PAGE = 10
+
+const route = useRoute()
+const loginPrompt = useLoginPromptStore()
 
 const posts = ref<PostItem[]>([])
 const meta = ref<PaginationMeta | null>(null)
@@ -79,6 +84,10 @@ function clearFilters() {
 
 // 切换反应：用接口返回值局部更新这一条，不整页刷新
 async function onReact(post: PostItem, type: ReactionType) {
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
   if (reactingPostId.value !== null) return
 
   reactingPostId.value = post.ID

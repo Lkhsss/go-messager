@@ -6,7 +6,11 @@ import CommentSection from '@/components/CommentSection.vue'
 import { fetchPost, type PostItem } from '@/api/post'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError } from '@/api/http'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
+const loginPrompt = useLoginPromptStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -40,6 +44,10 @@ async function loadPost() {
 
 async function onReact(type: ReactionType) {
   if (!post.value || reacting.value) return
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
 
   reacting.value = true
   try {

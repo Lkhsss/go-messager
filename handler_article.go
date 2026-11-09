@@ -138,11 +138,8 @@ func (d *Data) NewPost(c *gin.Context) {
 
 // GetPost 文章列表，支持标签过滤。
 func (d *Data) GetPost(c *gin.Context) {
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
+	// 隐私模式由 ReadAuth 保证已登录；公开模式匿名为零值 User，只返回公开文章。
+	user, _ := CurrentUser(c)
 
 	include, exclude, filterErr := parseTagFilters(c)
 	if filterErr != nil {
@@ -425,11 +422,8 @@ func (d *Data) GetComments(c *gin.Context) {
 		return
 	}
 
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
+	// 隐私模式由 ReadAuth 保证已登录；公开模式匿名为零值 User。
+	user, _ := CurrentUser(c)
 
 	var root Post
 	if err := d.DB.Take(&root, rootID).Error; err != nil {
@@ -556,11 +550,8 @@ func (d *Data) GetPostByID(c *gin.Context) {
 		return
 	}
 
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
+	// 隐私模式由 ReadAuth 保证已登录；公开模式匿名为零值 User。
+	user, _ := CurrentUser(c)
 
 	var post Post
 	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {

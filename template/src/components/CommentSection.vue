@@ -3,6 +3,13 @@ import { onMounted, ref } from 'vue'
 import { createComment, deletePost, fetchComments, type CommentItem, type PostItem } from '@/api/post'
 import { isApiError } from '@/api/http'
 import CommentNode from '@/components/CommentNode.vue'
+import { useRoute } from 'vue-router'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
+import { useAuthStore } from '@/stores/auth'
+
+const route = useRoute()
+const auth = useAuthStore()
+const loginPrompt = useLoginPromptStore()
 
 const props = defineProps<{ postId: number }>()
 
@@ -54,6 +61,11 @@ async function loadComments() {
 
 async function submitComment() {
   if (submitting.value) return
+
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
 
   const content = body.value.trim()
   if (!content) {
@@ -125,6 +137,16 @@ async function confirmDelete() {
     deleting.value = false
   }
 }
+
+// 未登录时点击评论输入框直接弹出登录提示。
+function onCommentClick(event: MouseEvent) {
+  if (auth.isLoggedIn) return
+  loginPrompt.show(route.fullPath)
+  if (event.target instanceof HTMLElement) {
+    event.target.blur()
+  }
+}
+
 onMounted(() => {
   void loadComments()
 })
@@ -140,7 +162,8 @@ onMounted(() => {
 
       <form class="space-y-2" @submit.prevent="submitComment">
         <textarea v-model="body" rows="4" class="textarea textarea-bordered w-full text-sm"
-          placeholder="写下你的评论，支持 Markdown…" :disabled="submitting"></textarea>
+          :placeholder="auth.isLoggedIn ? '写下你的评论，支持 Markdown…' : '登录后即可发表评论'"
+          :readonly="!auth.isLoggedIn" :disabled="submitting" @click="onCommentClick"></textarea>
         <div class="flex justify-end gap-2">
 
           <button type="submit" class="btn btn-primary btn-sm" :disabled="submitting">

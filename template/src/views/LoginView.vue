@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useSystemStore } from '@/stores/system'
 import { isApiError } from '@/api/http'
 
 type Mode = 'login' | 'register'
@@ -9,6 +10,7 @@ type Mode = 'login' | 'register'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const system = useSystemStore()
 
 const mode = ref<Mode>('login')
 const loading = ref(false)
@@ -122,6 +124,8 @@ async function onSubmit() {
           <button type="button" class="link link-primary"
             @click="switchMode(isRegister ? 'login' : 'register')">{{ isRegister ? '去登录' : '去注册' }}</button>
         </p>
+
+        <router-link v-if="system.isPublic" to="/" class="btn btn-ghost btn-sm w-full">先逛逛首页</router-link>
       </div>
     </div>
   </div>

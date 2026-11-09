@@ -32,6 +32,11 @@ type apiResponse struct {
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
+	return newTestEnvWithAccessMode(t, AccessModePrivate)
+}
+
+func newTestEnvWithAccessMode(t *testing.T, accessMode string) *testEnv {
+	t.Helper()
 
 	gin.SetMode(gin.TestMode)
 
@@ -59,6 +64,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	r := gin.New()
 	cfg := DefaultConfig()
 	cfg.JWT.Secret = "test-secret"
+	cfg.Access.Mode = accessMode
 	if err := api(r, db, cfg); err != nil {
 		t.Fatalf("挂载路由失败：%v", err)
 	}

@@ -35,7 +35,7 @@ func (d *Data) Uptime(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, payload)
 }
 
-// Status 是否已初始化。
+// Status 是否已初始化，以及站点访问模式。
 func (d *Data) Status(c *gin.Context) {
 	var count int64
 	if err := d.DB.Model(&User{}).Count(&count).Error; err != nil {
@@ -43,5 +43,10 @@ func (d *Data) Status(c *gin.Context) {
 		return
 	}
 
-	Response{}.Ok(c, http.StatusOK, gin.H{"initialized": count > 0})
+	mode := d.AccessMode
+	if mode == "" {
+		mode = AccessModePrivate
+	}
+
+	Response{}.Ok(c, http.StatusOK, gin.H{"initialized": count > 0, "mode": mode})
 }

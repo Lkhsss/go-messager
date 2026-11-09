@@ -28,6 +28,9 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if cfg.Server.Mode != gin.ReleaseMode {
 		t.Fatalf("mode 默认值应为 release，实际 %q", cfg.Server.Mode)
 	}
+	if cfg.Access.Mode != AccessModePrivate {
+		t.Fatalf("access.mode 默认值应为 private，实际 %q", cfg.Access.Mode)
+	}
 	if cfg.Database.Path != filepath.Join("data", "data.db") {
 		t.Fatalf("数据库默认路径异常：%s", cfg.Database.Path)
 	}
@@ -46,6 +49,9 @@ func TestLoadConfigFromFile(t *testing.T) {
 host = 127.0.0.1
 port = 9090
 mode = release
+
+[access]
+mode = public
 
 [database]
 path = ./tmp/app.db
@@ -66,6 +72,9 @@ ttl = 2h
 	if cfg.Server.Host != "127.0.0.1" || cfg.Server.Port != 9090 || cfg.Server.Mode != gin.ReleaseMode {
 		t.Fatalf("server 配置解析异常：%+v", cfg.Server)
 	}
+	if cfg.Access.Mode != AccessModePublic {
+		t.Fatalf("access.mode 解析异常：%q", cfg.Access.Mode)
+	}
 	if cfg.Database.Path != filepath.Clean("./tmp/app.db") {
 		t.Fatalf("database.path 解析异常：%s", cfg.Database.Path)
 	}
@@ -80,6 +89,9 @@ func TestLoadConfigEmptyValuesUseDefaults(t *testing.T) {
 [server]
 host =
 port =
+mode =
+
+[access]
 mode =
 
 [database]
@@ -101,6 +113,9 @@ ttl =
 	if cfg.Server.Host != "" || cfg.Server.Port != defaultServerPort || cfg.Server.Mode != gin.ReleaseMode {
 		t.Fatalf("空 server 配置应回退默认值：%+v", cfg.Server)
 	}
+	if cfg.Access.Mode != AccessModePrivate {
+		t.Fatalf("空 access.mode 应回退 private，实际 %q", cfg.Access.Mode)
+	}
 	if cfg.Database.Path != filepath.Join("data", "data.db") {
 		t.Fatalf("空 database.path 应回退默认值：%s", cfg.Database.Path)
 	}
@@ -119,6 +134,7 @@ func TestLoadConfigInvalidValues(t *testing.T) {
 		{name: "port 超出范围", body: "[server]\nport = 0\n", want: "1-65535"},
 		{name: "ttl 非法", body: "[jwt]\nttl = 2d\n", want: "[jwt] ttl"},
 		{name: "mode 非法", body: "[server]\nmode = prod\n", want: "[server] mode"},
+		{name: "access mode 非法", body: "[access]\nmode = secret\n", want: "[access] mode"},
 	}
 
 	for _, tt := range tests {

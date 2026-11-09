@@ -9,11 +9,8 @@ import (
 
 // GetRecentPostCount 近 24 小时原文数。
 func (d *Data) GetRecentPostCount(c *gin.Context) {
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
+	// 隐私模式由 ReadAuth 保证已登录；公开模式匿名为零值 User。
+	user, _ := CurrentUser(c)
 
 	var count int64
 	db := d.DB.Model(&Post{}).

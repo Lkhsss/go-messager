@@ -27,11 +27,8 @@ type leaderboardRow struct {
 
 // GetLeaderboard 点赞/点踩/疑问排行，只统计原文。
 func (d *Data) GetLeaderboard(c *gin.Context) {
-	user, ok := CurrentUser(c)
-	if !ok {
-		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-		return
-	}
+	// 隐私模式由 ReadAuth 保证已登录；公开模式匿名为零值 User，只统计公开文章。
+	user, _ := CurrentUser(c)
 
 	period := c.DefaultQuery("period", "week")
 	now := time.Now()

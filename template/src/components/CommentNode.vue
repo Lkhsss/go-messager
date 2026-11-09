@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import type { CommentItem } from '@/api/post'
 import { createComment } from '@/api/post'
 import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError } from '@/api/http'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -28,6 +30,8 @@ const emit = defineEmits<{
 }>()
 
 const auth = useAuthStore()
+const loginPrompt = useLoginPromptStore()
+const route = useRoute()
 const canDelete = computed(() => auth.isAdmin || auth.user?.name === props.comment.user)
 
 const replying = ref(false)
@@ -41,8 +45,21 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
 }
 
+function toggleReply() {
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
+  replying.value = !replying.value
+}
+
 async function submitReply() {
   if (submitting.value) return
+
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
 
   const body = replyBody.value.trim()
   if (!body) {
@@ -66,6 +83,10 @@ async function submitReply() {
 
 async function onReact(type: ReactionType) {
   if (reacting.value) return
+  if (!auth.isLoggedIn) {
+    loginPrompt.show(route.fullPath)
+    return
+  }
 
   reacting.value = true
   errorMsg.value = ''
@@ -97,7 +118,7 @@ async function onReact(type: ReactionType) {
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <ReactionBar :reactions="comment.reactions" :my-reactions="comment.my_reactions" :busy="reacting"
         @react="onReact" />
-      <button type="button" class="btn btn-ghost btn-xs" @click="replying = !replying">回复</button>
+      <button type="button" class="btn btn-ghost btn-xs" @click="toggleReply">回复</button>
       <button v-if="canDelete" type="button" class="btn btn-ghost btn-xs text-error" @click="$emit('delete', comment)">删除</button>
     </div>
 

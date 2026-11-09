@@ -7,6 +7,7 @@ import HomeIcon from './components/icons/HomeIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import SiteFooter from './components/SiteFooter.vue';
+import LoginPromptToast from './components/LoginPromptToast.vue';
 import { useAuthStore } from './stores/auth';
 
 const sidebarOpen = ref(false)
@@ -20,7 +21,8 @@ const auth = useAuthStore()
 
 async function logout() {
   auth.logout()
-  await router.replace({ name: 'login' })
+  // 公开模式回到首页；隐私模式由路由守卫自动转到登录页。
+  await router.replace({ name: "home" })
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -79,12 +81,13 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
           </div>
 
         </div>
-        <div class="flex-none flex items-center gap-2">
-          <UserAvatar v-if="auth.user" :name="auth.user.name" :version="auth.user.avatar_version" :size="32" />
+        <div v-if="auth.user" class="flex-none flex items-center gap-2">
+          <UserAvatar :name="auth.user.name" :version="auth.user.avatar_version" :size="32" />
           <span v-if="auth.isAdmin" class="badge badge-primary badge-sm">管理员</span>
-          <span v-if="auth.user" class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user.name }}</span>
+          <span class="hidden text-sm text-base-content/70 sm:inline">{{ auth.user.name }}</span>
           <button type="button" class="btn btn-ghost btn-sm" @click="logout">退出登录</button>
         </div>
+        <router-link v-else to="/login" class="btn btn-ghost btn-sm">登录</router-link>
       </nav>
       <div class="flex flex-1 flex-col">
         <RouterView />
@@ -178,6 +181,8 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
       </div>
     </div>
   </div>
+
+  <LoginPromptToast />
 </template>
 
 

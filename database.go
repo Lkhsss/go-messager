@@ -27,8 +27,16 @@ type Data struct {
 	JWTSecret []byte
 	JWTTTL    time.Duration
 
+	// 站点访问模式：private / public，空值按 private 处理。
+	AccessMode string
+
 	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
+}
+
+// IsPublic 是否允许游客浏览文章。
+func (d *Data) IsPublic() bool {
+	return d.AccessMode == AccessModePublic
 }
 
 // openDatabase 打开 SQLite，错误里附带路径和排查提示。

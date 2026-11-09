@@ -11,6 +11,11 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 		return err
 	}
 
+	data.AccessMode = cfg.Access.Mode
+	if data.AccessMode == "" {
+		data.AccessMode = AccessModePrivate
+	}
+
 	g := r.Group("/api")
 
 	// 公开
@@ -20,18 +25,24 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	g.POST("/register", data.Register)
 	g.GET("/uptime", data.Uptime)
 
+	// 只读：隐私模式必须登录，公开模式允许游客（登录后仍可看到自己的反应）。
+	read := g.Group("")
+	read.Use(data.ReadAuth())
+	read.GET("/post", data.GetPost)
+	read.GET("/post/:id", data.GetPostByID)
+	read.GET("/post/:id/comments", data.GetComments)
+	read.GET("/recent-post-count", data.GetRecentPostCount)
+	read.GET("/tag", data.GetTags)
+	read.GET("/leaderboard", data.GetLeaderboard)
+
 	// 需登录
 	authed := g.Group("")
 	authed.Use(data.AuthRequired())
 	authed.GET("/me", data.Me)
 	authed.PUT("/me/avatar", data.UpdateAvatar)
 	authed.DELETE("/me/avatar", data.DeleteAvatar)
-	authed.GET("/post", data.GetPost)
-	authed.GET("/recent-post-count", data.GetRecentPostCount)
-	authed.GET("/post/:id", data.GetPostByID)
 	authed.POST("/post/new", data.NewPost)
 	authed.POST("/post/:id/reaction", data.ToggleReaction)
-	authed.GET("/tag", data.GetTags)
 
 	// 需管理员
 	admin := g.Group("")
@@ -50,10 +61,8 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	authed.PUT("/post/:id", data.UpdatePost)
 	authed.DELETE("/post/:id", data.DeletePost)
 	admin.PATCH("/post/:id/private", data.SetPostPrivate)
-	authed.GET("/post/:id/comments", data.GetComments)
 	authed.POST("/post/:id/comments", data.CreateComment)
 	authed.GET("/me/stats", data.GetMyStats)
 	admin.GET("/admin/stats", data.GetAdminStats)
-	authed.GET("/leaderboard", data.GetLeaderboard)
 	return nil
 }

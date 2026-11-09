@@ -13,47 +13,54 @@ import (
 // 当前用户在 context 中的 key。
 const ctxUserKey = "auth.user"
 
-// AuthRequired 校验 token，并从数据库加载用户（角色以库为准）。
+// authFailure 认证失败信息。
+type authFailure struct {
+	status  int
+	code    string
+	message string
+}
+
+// authenticate 解析 token 并从数据库加载用户（角色以库为准）。
+func (d *Data) authenticate(c *gin.Context) (User, *authFailure) {
+	raw, ok := bearerToken(c.GetHeader("Authorization"))
+	if !ok {
+		return User{}, &authFailure{status: http.StatusUnauthorized, code: "UNAUTHORIZED", message: "请先登录"}
+	}
+
+	claims, err := d.parseToken(raw)
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return User{}, &authFailure{status: http.StatusUnauthorized, code: "TOKEN_EXPIRED", message: "登录已过期，请重新登录"}
+		}
+		return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+	}
+
+	id, err := userIDFromClaims(claims)
+	if err != nil {
+		return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+	}
+
+	user, err := d.GetUserByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+		}
+		return User{}, &authFailure{status: http.StatusInternalServerError, code: "QUERY_FAILED", message: err.Error()}
+	}
+
+	if user.Role == RoleNone {
+		return User{}, &authFailure{status: http.StatusForbidden, code: "ACCOUNT_DISABLED", message: "账号已被停用"}
+	}
+
+	return user, nil
+}
+
+// AuthRequired 校验 token，未登录或登录失效时中断请求。
 func (d *Data) AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		raw, ok := bearerToken(c.GetHeader("Authorization"))
-		if !ok {
-			Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
-			c.Abort()
-			return
-		}
-
-		claims, err := d.parseToken(raw)
-		if err != nil {
-			code, message := "INVALID_TOKEN", "登录状态无效，请重新登录"
-			if errors.Is(err, jwt.ErrTokenExpired) {
-				code, message = "TOKEN_EXPIRED", "登录已过期，请重新登录"
-			}
-			Response{}.Fail(c, http.StatusUnauthorized, code, message)
-			c.Abort()
-			return
-		}
-
-		id, err := userIDFromClaims(claims)
-		if err != nil {
-			Response{}.Fail(c, http.StatusUnauthorized, "INVALID_TOKEN", "登录状态无效，请重新登录")
-			c.Abort()
-			return
-		}
-
-		user, err := d.GetUserByID(id)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				Response{}.Fail(c, http.StatusUnauthorized, "INVALID_TOKEN", "登录状态无效，请重新登录")
-			} else {
-				Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
-			}
-			c.Abort()
-			return
-		}
-
-		if user.Role == RoleNone {
-			Response{}.Fail(c, http.StatusForbidden, "ACCOUNT_DISABLED", "账号已被停用")
+		user, failure := d.authenticate(c)
+		if failure != nil {
+			Response{}.Fail(c, failure.status, failure.code, failure.message)
 			c.Abort()
 			return
 		}
@@ -61,6 +68,25 @@ func (d *Data) AuthRequired() gin.HandlerFunc {
 		c.Set(ctxUserKey, user)
 		c.Next()
 	}
+}
+
+// OptionalAuth 有合法 token 时填充当前用户，否则按游客继续。
+// 仅用于公开模式下的只读接口；写接口仍由 AuthRequired 兜底。
+func (d *Data) OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if user, failure := d.authenticate(c); failure == nil {
+			c.Set(ctxUserKey, user)
+		}
+		c.Next()
+	}
+}
+
+// ReadAuth 只读接口的访问控制：隐私模式必须登录，公开模式允许游客。
+func (d *Data) ReadAuth() gin.HandlerFunc {
+	if d.IsPublic() {
+		return d.OptionalAuth()
+	}
+	return d.AuthRequired()
 }
 
 // AdminOnly 要求管理员，需在 AuthRequired 之后。

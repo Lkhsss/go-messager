@@ -1,10 +1,13 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { getStatus } from "@/api/system";
+import { getStatus, type AccessMode } from "@/api/system";
 
 export const useSystemStore = defineStore("system", () => {
   // null 表示未查询。
   const initialized = ref<boolean | null>(null);
+  // 默认 private，接口异常时保持最保守的行为。
+  const mode = ref<AccessMode>("private");
+  const isPublic = computed(() => mode.value === "public");
   let inflight: Promise<boolean> | null = null;
 
   // 只请求一次，并发复用。
@@ -19,6 +22,7 @@ export const useSystemStore = defineStore("system", () => {
     inflight = getStatus()
       .then((status) => {
         initialized.value = status.initialized;
+        mode.value = status.mode === "public" ? "public" : "private";
         return status.initialized;
       })
       .catch(() => {
@@ -37,5 +41,5 @@ export const useSystemStore = defineStore("system", () => {
     initialized.value = true;
   }
 
-  return { initialized, ensureInitialized, markInitialized };
+  return { initialized, mode, isPublic, ensureInitialized, markInitialized };
 });
