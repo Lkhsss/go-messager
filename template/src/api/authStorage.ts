@@ -10,6 +10,9 @@ export interface AuthUser {
   avatar_version?: string;
   // 该用户文章收到的反应总和
   reaction_totals?: ReactionSummary;
+  // 累计经验与等级
+  exp?: number;
+  level?: number;
 }
 
 export interface StoredAuth {
@@ -60,6 +63,8 @@ export function readAuth(): StoredAuth | null {
     const roleCandidate = storedUser?.role;
     const avatarVersion = typeof storedUser?.avatar_version === "string" ? storedUser.avatar_version : undefined;
     const reactionTotals = storedUser?.reaction_totals;
+    const exp = typeof storedUser?.exp === "number" ? storedUser.exp : undefined;
+    const level = typeof storedUser?.level === "number" ? storedUser.level : undefined;
 
     return {
       token: parsed.token,
@@ -69,6 +74,8 @@ export function readAuth(): StoredAuth | null {
         role: isRole(roleCandidate) ? roleCandidate : "user",
         ...(avatarVersion ? { avatar_version: avatarVersion } : {}),
         ...(reactionTotals ? { reaction_totals: reactionTotals } : {}),
+        ...(typeof exp === "number" ? { exp } : {}),
+        ...(typeof level === "number" ? { level } : {}),
       },
     };
   } catch {

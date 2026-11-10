@@ -127,6 +127,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 13. [x] 配置读取逻辑优化
 14. [x] 隐私模式和公开模式
 15. [x] 最小配置/docker配置
+16. [x] 等级系统 lkhsss/go-messager#1
 
 # FIXME
 

@@ -9,12 +9,14 @@ const props = withDefaults(
   defineProps<{
     name: string
     role?: Role
+    level?: number
     avatarVersion?: string
     previewSrc?: string
     reactionTotals?: ReactionSummary
   }>(),
   {
     role: 'user',
+    level: 0,
     avatarVersion: '',
     previewSrc: '',
   },
@@ -60,6 +62,9 @@ const cardLabel = computed(() => `${props.name} 的个人名片，角色：${rol
           <div class="min-w-0">
             <p class="text-[0.55rem] uppercase tracking-[0.28em] text-white/40">Card Holder</p>
             <p class="profile-name truncate text-xl font-semibold sm:text-2xl">{{ name }}</p>
+            <span v-if="level"
+              class="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200/40 bg-sky-200/15 px-2 py-0.5 font-mono text-[0.65rem] text-sky-100"
+              :title="`等级 ${level}`">Lv.{{ level }}</span>
             <span class="mt-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem]"
               :class="isAdmin ? 'border-amber-200/40 bg-amber-200/15 text-amber-100' : 'border-white/15 bg-white/10 text-white/75'">
               <span class="h-1 w-1 rounded-full" :class="isAdmin ? 'bg-amber-200' : 'bg-white/50'"></span>

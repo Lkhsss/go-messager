@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { isApiError } from '@/api/http'
+import { fetchExperience, type DailyTaskState, type ExperienceStatus } from '@/api/experience'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ProfileCard from '@/components/ProfileCard.vue'
 import { EMOJI_REACTIONS, PRIMARY_REACTIONS, reactionCount } from '@/api/reaction'
@@ -73,6 +74,41 @@ async function removeAvatar() {
     saving.value = false
   }
 }
+
+// 经验条和每日任务
+const experience = ref<ExperienceStatus | null>(null)
+const experienceLoading = ref(false)
+const experienceError = ref('')
+
+const levelProgressPercent = computed(() => {
+  const status = experience.value
+  if (!status || status.level_need_exp <= 0) return 0
+  return Math.min(100, Math.round((status.level_progress_exp / status.level_need_exp) * 100))
+})
+
+async function loadExperience() {
+  if (experienceLoading.value) return
+
+  experienceLoading.value = true
+  experienceError.value = ''
+  try {
+    const status = await fetchExperience()
+    experience.value = status
+    auth.applyExperience(status.exp, status.level)
+  } catch (err) {
+    experienceError.value = isApiError(err) ? err.message : '获取经验信息失败，请稍后再试'
+  } finally {
+    experienceLoading.value = false
+  }
+}
+
+function taskStatusLabel(task: DailyTaskState): string {
+  return task.completed ? '已完成' : `+${task.reward} 经验`
+}
+
+onMounted(() => {
+  void loadExperience()
+})
 </script>
 
 <template>
@@ -89,11 +125,81 @@ async function removeAvatar() {
       <section aria-labelledby="profile-card-heading" class="flex flex-col items-center gap-3">
         <h2 id="profile-card-heading" class="sr-only">个人名片</h2>
         <ProfileCard :name="auth.user?.name ?? '?'" :role="auth.user?.role ?? 'user'"
+          :level="auth.user?.level ?? 0"
           :avatar-version="auth.user?.avatar_version" :preview-src="previewSrc"
           :reaction-totals="auth.user?.reaction_totals" />
       </section>
 
       <div class="space-y-6">
+        <!-- 等级与经验 -->
+        <section class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="card-title text-lg">等级与经验</h2>
+              <div class="flex items-center gap-2">
+                <span
+                  class="badge rounded-full border-primary/30 bg-primary/10 font-mono text-primary">Lv.{{ auth.user?.level ?? 1 }}</span>
+                <button type="button" class="btn btn-ghost btn-xs" :disabled="experienceLoading"
+                  @click="loadExperience">刷新</button>
+              </div>
+            </div>
+
+            <div v-if="experienceError" role="alert" class="alert alert-error alert-soft py-2 text-sm">
+              <span>{{ experienceError }}</span>
+            </div>
+
+            <div v-else-if="experience" class="space-y-2">
+              <progress class="progress progress-primary w-full" :value="levelProgressPercent"
+                max="100"></progress>
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-base-content/60">
+                <span>本级 {{ experience.level_progress_exp }} / {{ experience.level_need_exp }} 经验</span>
+                <span>还差
+                  {{ Math.max(experience.level_need_exp - experience.level_progress_exp, 0) }} 经验升级</span>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-base-content/45">
+                <span>累计经验 {{ experience.exp }}</span>
+                <span>下一级门槛 {{ experience.next_level_exp }}</span>
+              </div>
+            </div>
+
+            <div v-else class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 每日任务 -->
+        <section class="card bg-base-100 shadow-sm">
+          <div class="card-body gap-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="card-title text-lg">每日任务</h2>
+              <span v-if="experience" class="text-xs text-base-content/45">{{ experience.date }} 重置</span>
+            </div>
+
+            <ul v-if="experience" class="space-y-2">
+              <li v-for="task in experience.tasks" :key="task.key"
+                class="flex flex-wrap items-center justify-between gap-2 rounded-box border px-3 py-2"
+                :class="task.completed ? 'border-success/30 bg-success/10' : 'border-base-200'">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium">{{ task.label }}</span>
+                    <span class="badge badge-sm rounded-full"
+                      :class="task.completed ? 'badge-success' : 'badge-ghost'">{{ taskStatusLabel(task) }}</span>
+                  </div>
+                  <p class="text-xs text-base-content/55">{{ task.description }}</p>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-base-content/60">
+                  <span class="font-mono">{{ task.progress }}/{{ task.target }}</span>
+                  <router-link v-if="task.key === 'article'" to="/post/new" class="btn btn-ghost btn-xs">去写文章</router-link>
+                  <router-link v-else-if="task.key === 'comment' || task.key === 'interaction'" to="/"
+                    class="btn btn-ghost btn-xs">去互动</router-link>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-base-content/50">正在加载每日任务…</p>
+          </div>
+        </section>
+
         <section class="card bg-base-100 shadow-sm">
           <div class="card-body gap-4">
             <h2 class="card-title text-lg">头像</h2>

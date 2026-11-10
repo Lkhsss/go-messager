@@ -112,16 +112,19 @@ func (d *Data) fillPostAvatars(posts []Post) {
 	}
 
 	var users []User
-	if err := d.DB.Select("name", "avatar").Where("name IN ?", names).Find(&users).Error; err != nil {
+	if err := d.DB.Select("name", "avatar", "exp").Where("name IN ?", names).Find(&users).Error; err != nil {
 		return // 头像只是展示信息，查询失败不影响文章
 	}
 
 	versions := make(map[string]string, len(users))
+	levels := make(map[string]int, len(users))
 	for _, user := range users {
 		versions[user.Name] = avatarVersion(user.Avatar)
+		levels[user.Name], _, _ = levelFromExp(user.Exp)
 	}
 
 	for i := range posts {
 		posts[i].UserAvatarVersion = versions[posts[i].User]
+		posts[i].UserLevel = levels[posts[i].User]
 	}
 }

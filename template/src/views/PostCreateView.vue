@@ -7,6 +7,7 @@ import type { TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
 import { renderMarkdown } from '@/utils/markdown'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 // 与后端 maxTagsPerPost 保持一致
 const MAX_TAGS = 5
@@ -16,6 +17,7 @@ const MAX_BODY = 100000
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const toast = useToastStore()
 
 const postId = computed(() => {
   const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
@@ -122,7 +124,11 @@ async function onSubmit() {
       await updatePost(id, input)
       await router.replace('/my-posts')
     } else {
-      await createPost(input)
+      const created = await createPost(input)
+      if (created.xp) {
+        auth.applyExperience(created.xp.exp, created.xp.level)
+        toast.notifyXp(created.xp)
+      }
       await router.replace('/')
     }
   } catch (err) {

@@ -12,11 +12,13 @@ import { tagBadgeStyle } from '@/utils/tagColor'
 import { renderEmojiText } from '@/utils/emoji'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 const POSTS_PER_PAGE = 10
 
 const route = useRoute()
 const loginPrompt = useLoginPromptStore()
+const toast = useToastStore()
 
 const posts = ref<PostItem[]>([])
 const meta = ref<PaginationMeta | null>(null)
@@ -97,6 +99,10 @@ async function onReact(post: PostItem, type: ReactionType) {
     if (target) {
       target.reactions = result.reactions
       target.my_reactions = result.my_reactions
+    }
+    if (result.xp) {
+      auth.applyExperience(result.xp.exp, result.xp.level)
+      toast.notifyXp(result.xp)
     }
   } catch (err) {
     errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
@@ -265,7 +271,8 @@ function goTo(next: number) {
     <template v-else>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2" :class="{ 'opacity-60': loading }">
                 <Post v-for="post in posts" :key="post.ID" :post-id="post.ID" :user="post.user" :title="post.title"
-          :subtitle="post.subtitle" :excerpt="post.excerpt" :user-avatar-version="post.user_avatar_version" :tags="post.tags"
+          :subtitle="post.subtitle" :excerpt="post.excerpt" :user-avatar-version="post.user_avatar_version"
+          :user-level="post.user_level" :tags="post.tags"
           :reactions="post.reactions" :my-reactions="post.my_reactions" :reacting="reactingPostId === post.ID"
           :is-private="post.private" :can-manage="auth.isAdmin" :managing="managingPostId === post.ID"
           @react="onReact(post, $event)" @toggle-private="onTogglePrivate(post)" @delete="openDelete(post)" />

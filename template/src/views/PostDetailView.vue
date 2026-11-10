@@ -8,9 +8,11 @@ import { toggleReaction, type ReactionType } from '@/api/reaction'
 import { isApiError } from '@/api/http'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 const auth = useAuthStore()
 const loginPrompt = useLoginPromptStore()
+const toast = useToastStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -54,6 +56,10 @@ async function onReact(type: ReactionType) {
     const result = await toggleReaction(post.value.ID, type)
     post.value.reactions = result.reactions
     post.value.my_reactions = result.my_reactions
+    if (result.xp) {
+      auth.applyExperience(result.xp.exp, result.xp.level)
+      toast.notifyXp(result.xp)
+    }
   } catch (err) {
     errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
   } finally {
@@ -87,9 +93,9 @@ onMounted(() => {
 
     <template v-else-if="post">
       <Post :post-id="post.ID" :user="post.user" :title="post.title" :subtitle="post.subtitle" :body="post.body"
-        :user-avatar-version="post.user_avatar_version" :tags="post.tags" :reactions="post.reactions"
-        :my-reactions="post.my_reactions" :is-private="post.private" :reacting="reacting" :detail="true"
-        @react="onReact" />
+        :user-avatar-version="post.user_avatar_version" :user-level="post.user_level" :tags="post.tags"
+        :reactions="post.reactions" :my-reactions="post.my_reactions" :is-private="post.private"
+        :reacting="reacting" :detail="true" @react="onReact" />
 
       <CommentSection :post-id="post.ID" />
     </template>

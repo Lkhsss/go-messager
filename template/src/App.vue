@@ -4,10 +4,13 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import SidebartoggleOpen from './components/icons/SidebarToggleOpen.vue';
 import SidebarToggleClose from './components/icons/SidebarToggleClose.vue';
 import HomeIcon from './components/icons/HomeIcon.vue';
-import SettingIcon from './components/icons/SettingIcon.vue';
+// 设置页暂时下线，等待后续调整后恢复。
+// import SettingIcon from './components/icons/SettingIcon.vue';
+import UserIcon from './components/icons/UserIcon.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import SiteFooter from './components/SiteFooter.vue';
 import LoginPromptToast from './components/LoginPromptToast.vue';
+import XpToast from './components/XpToast.vue';
 import { useAuthStore } from './stores/auth';
 
 const sidebarOpen = ref(false)
@@ -170,6 +173,15 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
             </router-link>
           </li>
 
+          <!-- 我的 -->
+          <li>
+            <router-link to="/me" class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="我的">
+              <UserIcon />
+              <span class="is-drawer-close:hidden">我的</span>
+            </router-link>
+          </li>
+
+          <!-- 设置页暂时下线，等待后续调整后恢复
           <li>
             <router-link to="/setting" class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
               data-tip="Settings">
@@ -177,12 +189,14 @@ onUnmounted(() => window.removeEventListener('keydown', onShortcutKeydown))
               <span class="is-drawer-close:hidden">Settings</span>
             </router-link>
           </li>
+          -->
         </ul>
       </div>
     </div>
   </div>
 
   <LoginPromptToast />
+  <XpToast />
 </template>
 
 

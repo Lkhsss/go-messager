@@ -16,6 +16,8 @@ type AuthResult struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
 	User      UserView  `json:"user"`
+	// 每日登录经验，重复登录为 nil。
+	XP *XPGain `json:"xp,omitempty"`
 }
 
 // Authorize 登录 POST /api/authorize
@@ -67,11 +69,16 @@ func (d *Data) Authorize(c *gin.Context) {
 	}).Error; err != nil {
 		// 统计更新失败时仍允许登录
 	}
-	Response{}.Ok(c, http.StatusOK, AuthResult{
-		Token:     token,
-		ExpiresAt: expiresAt,
-		User:      user.View(),
-	})
+
+	result := AuthResult{Token: token, ExpiresAt: expiresAt, User: user.View()}
+	// 每日登录经验，发放失败不影响登录。
+	if gain, xpErr := d.awardDailyTask(user.ID, DailyTaskLogin, DailyLoginXP, time.Now()); xpErr == nil && gain != nil {
+		user.Exp = gain.Exp
+		result.User = user.View()
+		result.XP = gain
+	}
+
+	Response{}.Ok(c, http.StatusOK, result)
 }
 
 // Register 首个用户自动成为 admin。
@@ -117,11 +124,15 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
-	Response{}.Ok(c, http.StatusCreated, AuthResult{
-		Token:     token,
-		ExpiresAt: expiresAt,
-		User:      user.View(),
-	})
+	result := AuthResult{Token: token, ExpiresAt: expiresAt, User: user.View()}
+	// 注册即登录，同样计每日登录经验。
+	if gain, xpErr := d.awardDailyTask(user.ID, DailyTaskLogin, DailyLoginXP, time.Now()); xpErr == nil && gain != nil {
+		user.Exp = gain.Exp
+		result.User = user.View()
+		result.XP = gain
+	}
+
+	Response{}.Ok(c, http.StatusCreated, result)
 }
 
 // Me 当前用户，前端用来校验本地 token。

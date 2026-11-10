@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// 建表。
-	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}, &DailyTaskProgress{}); err != nil {
 		panic(err)
 	}
 

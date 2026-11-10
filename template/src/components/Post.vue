@@ -18,6 +18,7 @@ const props = defineProps<{
   body?: string
   excerpt?: string
   userAvatarVersion?: string
+  userLevel?: number
   tags?: TagItem[]
   reactions?: ReactionSummary
   myReactions?: ReactionType[]
@@ -44,8 +45,11 @@ const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
     <div class="card-body gap-3">
       <header class="flex flex-wrap items-center gap-3">
         <UserAvatar :name="user" :version="userAvatarVersion" :size="40" />
-        <div class="min-w-0">
+        <div class="flex min-w-0 items-center gap-2">
           <p class="truncate font-medium">{{ user }}</p>
+          <span v-if="userLevel"
+            class="badge badge-sm shrink-0 rounded-full border-primary/30 bg-primary/10 font-mono text-primary"
+            :title="`等级 ${userLevel}`">Lv.{{ userLevel }}</span>
         </div>
         <span v-if="isPrivate" class="badge badge-warning badge-sm">Private</span>
         <div v-if="canManage" class="ml-auto flex items-center gap-1">

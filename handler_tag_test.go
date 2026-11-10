@@ -57,7 +57,7 @@ func newTestEnvWithAccessMode(t *testing.T, accessMode string) *testEnv {
 		_ = sqlDB.Close()
 	})
 
-	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}, &DailyTaskProgress{}); err != nil {
 		t.Fatalf("建表失败：%v", err)
 	}
 

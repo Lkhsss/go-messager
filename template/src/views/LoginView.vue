@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSystemStore } from '@/stores/system'
+import { useToastStore } from '@/stores/toast'
 import { isApiError } from '@/api/http'
 
 type Mode = 'login' | 'register'
@@ -11,6 +12,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const system = useSystemStore()
+const toast = useToastStore()
 
 const mode = ref<Mode>('login')
 const loading = ref(false)
@@ -53,10 +55,10 @@ async function onSubmit() {
   loading.value = true
   try {
     const credentials = { name: form.name.trim(), password: form.password }
-    if (isRegister.value) {
-      await auth.signup(credentials)
-    } else {
-      await auth.login(credentials)
+    const result = isRegister.value ? await auth.signup(credentials) : await auth.login(credentials)
+    if (result.xp) {
+      auth.applyExperience(result.xp.exp, result.xp.level)
+      toast.notifyXp(result.xp)
     }
 
     // 只接受站内路径，避免开放重定向

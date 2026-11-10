@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -130,8 +131,16 @@ func (d *Data) NewPost(c *gin.Context) {
 	}
 
 	post.UserAvatarVersion = avatarVersion(user.Avatar)
+	post.UserLevel, _, _ = levelFromExp(user.Exp)
 	post.Reactions = buildReactionSummary(0, 0, 0, "")
 	post.MyReactions = []ReactionType{}
+
+	// 达到字数要求时发放每日写文章经验，失败不影响发布。
+	if post.CharCount >= DailyArticleMinChars {
+		if gain, xpErr := d.awardDailyTask(user.ID, DailyTaskArticle, DailyArticleXP, time.Now()); xpErr == nil {
+			post.XP = gain
+		}
+	}
 
 	Response{}.Ok(c, http.StatusCreated, post)
 }
@@ -529,6 +538,14 @@ func (d *Data) CreateComment(c *gin.Context) {
 	result := []Post{comment}
 	d.fillPostAvatars(result)
 	d.fillPostReactions(result, user.ID)
+
+	// 达到字数要求时发放每日评论经验，失败不影响评论。
+	if countTextCharacters(body) >= DailyCommentMinChars {
+		if gain, xpErr := d.awardDailyTask(user.ID, DailyTaskComment, DailyCommentXP, time.Now()); xpErr == nil {
+			result[0].XP = gain
+		}
+	}
+
 	Response{}.Ok(c, http.StatusCreated, result[0])
 }
 

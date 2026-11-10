@@ -9,6 +9,7 @@ import { useLoginPromptStore } from '@/stores/loginPrompt'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ReactionBar from '@/components/ReactionBar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 // 评论正文同样按需加载 Markdown 渲染链路
 const MarkdownContent = defineAsyncComponent(() => import('@/components/MarkdownContent.vue'))
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 
 const auth = useAuthStore()
 const loginPrompt = useLoginPromptStore()
+const toast = useToastStore()
 const route = useRoute()
 const canDelete = computed(() => auth.isAdmin || auth.user?.name === props.comment.user)
 
@@ -70,7 +72,11 @@ async function submitReply() {
   submitting.value = true
   errorMsg.value = ''
   try {
-    await createComment(props.postId, body, props.comment.ID)
+    const created = await createComment(props.postId, body, props.comment.ID)
+    if (created.xp) {
+      auth.applyExperience(created.xp.exp, created.xp.level)
+      toast.notifyXp(created.xp)
+    }
     replyBody.value = ''
     replying.value = false
     emit('created')
@@ -94,6 +100,10 @@ async function onReact(type: ReactionType) {
     const result = await toggleReaction(props.comment.ID, type)
     props.comment.reactions = result.reactions
     props.comment.my_reactions = result.my_reactions
+    if (result.xp) {
+      auth.applyExperience(result.xp.exp, result.xp.level)
+      toast.notifyXp(result.xp)
+    }
   } catch (err) {
     errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
   } finally {
@@ -107,8 +117,11 @@ async function onReact(type: ReactionType) {
     :class="{ 'ml-3 border-l-4 border-l-base-300 sm:ml-6': depth > 0 }">
     <header class="flex items-center gap-2">
       <UserAvatar :name="comment.user" :version="comment.user_avatar_version" :size="32" />
-      <div class="min-w-0">
+      <div class="flex min-w-0 items-center gap-2">
         <p class="truncate text-sm font-medium">{{ comment.user }}</p>
+        <span v-if="comment.user_level"
+          class="badge badge-sm shrink-0 rounded-full border-primary/30 bg-primary/10 font-mono text-primary"
+          :title="`等级 ${comment.user_level}`">Lv.{{ comment.user_level }}</span>
         <p class="text-[0.65rem] text-base-content/40">{{ formatDate(comment.CreatedAt) }}</p>
       </div>
     </header>

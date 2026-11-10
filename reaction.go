@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -159,6 +160,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		authorID = author.ID
 	}
 
+	var added bool
 	err = d.DB.Transaction(func(tx *gorm.DB) error {
 		var existing Reaction
 		findErr := tx.Where("post_id = ? AND user_id = ? AND type = ?", post.ID, user.ID, req.Type).
@@ -170,6 +172,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 			if err := tx.Create(&Reaction{PostID: post.ID, UserID: user.ID, Type: req.Type}).Error; err != nil {
 				return err
 			}
+			added = true
 		case findErr != nil:
 			return findErr
 		default:
@@ -193,12 +196,20 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		return
 	}
 
-	Response{}.Ok(c, http.StatusOK, ReactionResult{
+	result := ReactionResult{
 		Reactions: buildReactionSummary(
 			updated.LikeCount, updated.DislikeCount, updated.QuestionCount, updated.EmojiCounts,
 		),
 		MyReactions: d.myReactionTypes(post.ID, user.ID),
-	})
+	}
+	// 只有新增反应才计入每日互动，达到每日上限后不再发放。
+	if added {
+		if gain, xpErr := d.awardDailyTask(user.ID, DailyTaskInteraction, DailyInteractionXP, time.Now()); xpErr == nil {
+			result.XP = gain
+		}
+	}
+
+	Response{}.Ok(c, http.StatusOK, result)
 }
 
 // applyReactionDelta 更新文章和作者计数。

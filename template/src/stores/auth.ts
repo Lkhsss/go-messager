@@ -75,6 +75,13 @@ export const useAuthStore = defineStore("auth", () => {
     return nextUser;
   }
 
+  // 同步经验/等级，药丸和经验条即时更新。
+  function applyExperience(exp: number, level: number) {
+    if (!user.value || !token.value) return;
+    user.value = { ...user.value, exp, level };
+    writeAuth({ token: token.value, expiresAt: expiresAt.value, user: user.value });
+  }
+
   function logout() {
     applyStored(null);
     clearAuth();
@@ -132,6 +139,7 @@ export const useAuthStore = defineStore("auth", () => {
     signup,
     updateAvatar,
     removeAvatar,
+    applyExperience,
     logout,
     sync,
     ensureSession,

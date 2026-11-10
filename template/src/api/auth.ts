@@ -1,5 +1,6 @@
 import http, { type ApiResponse } from "./http";
 import type { AuthUser } from "./authStorage";
+import type { XPGain } from "./experience";
 
 export interface Credentials {
   name: string;
@@ -10,6 +11,8 @@ export interface AuthResult {
   token: string;
   expires_at: string;
   user: AuthUser;
+  // 每日登录经验，重复登录不返回。
+  xp?: XPGain;
 }
 
 // 登录。密码放 body，避免出现在 URL。

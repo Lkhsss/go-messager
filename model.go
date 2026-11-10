@@ -32,6 +32,25 @@ type User struct {
 	// 登录统计，只计成功登录。
 	LoginCount  int64      `gorm:"not null;default:0" json:"-"`
 	LastLoginAt *time.Time `json:"-"`
+
+	// 累计经验值，等级由经验换算（见 level.go）。
+	Exp int64 `gorm:"not null;default:0" json:"-"`
+}
+
+// DailyTaskProgress 每日任务进度，按用户和日期各一行，跨天自动新建。
+type DailyTaskProgress struct {
+	ID     uint   `gorm:"primaryKey" json:"-"`
+	UserID uint   `gorm:"uniqueIndex:idx_daily_task_user_date,priority:1;not null" json:"-"`
+	Date   string `gorm:"uniqueIndex:idx_daily_task_user_date,priority:2;size:10;not null" json:"date"`
+
+	LoginDone   bool `gorm:"not null;default:false" json:"login_done"`
+	ArticleDone bool `gorm:"not null;default:false" json:"article_done"`
+	CommentDone bool `gorm:"not null;default:false" json:"comment_done"`
+	// 每日互动的已达次数，达上限后不再加经验。
+	InteractionCount int64 `gorm:"not null;default:0" json:"interaction_count"`
+
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 // UserView 对外用户信息。
@@ -40,10 +59,14 @@ type UserView struct {
 	Role           Role            `json:"role"`
 	AvatarVersion  string          `json:"avatar_version,omitempty"`
 	ReactionTotals ReactionSummary `json:"reaction_totals"`
+	Exp            int64           `json:"exp"`
+	Level          int             `json:"level"`
 }
 
 // View 返回对外结构。
 func (u User) View() UserView {
+	level, _, _ := levelFromExp(u.Exp)
+
 	return UserView{
 		Name:          u.Name,
 		Role:          u.Role,
@@ -51,6 +74,8 @@ func (u User) View() UserView {
 		ReactionTotals: buildReactionSummary(
 			u.LikeCount, u.DislikeCount, u.QuestionCount, u.EmojiCounts,
 		),
+		Exp:   u.Exp,
+		Level: level,
 	}
 }
 
@@ -88,8 +113,12 @@ type Post struct {
 
 	// 多对多标签。
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
-	// 作者头像版本，不落库。
+	// 作者头像版本与等级，不落库。
 	UserAvatarVersion string `gorm:"-" json:"user_avatar_version,omitempty"`
+	UserLevel         int    `gorm:"-" json:"user_level,omitempty"`
+
+	// 本次操作获得的经验，仅响应使用。
+	XP *XPGain `gorm:"-" json:"xp,omitempty"`
 
 	// 冗余计数，启动时按 reactions 校准。
 	LikeCount     int64  `gorm:"not null;default:0" json:"-"`
@@ -139,6 +168,8 @@ type ReactionInput struct {
 type ReactionResult struct {
 	Reactions   ReactionSummary `json:"reactions"`
 	MyReactions []ReactionType  `json:"my_reactions"`
+	// 新增反应获得的每日互动经验，取消反应为 nil。
+	XP *XPGain `json:"xp,omitempty"`
 }
 
 // Tag 标签，仅管理员可创建。

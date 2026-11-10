@@ -84,11 +84,18 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
-      path: "/setting",
-      name: "setting",
-      component: () => import("@/views/SettingView.vue"),
+      path: "/me",
+      name: "me",
+      component: () => import("@/views/MeView.vue"),
       meta: { requiresAuth: true },
     },
+    // 设置页暂时下线，等待后续调整后恢复。
+    // {
+    //   path: "/setting",
+    //   name: "setting",
+    //   component: () => import("@/views/SettingView.vue"),
+    //   meta: { requiresAuth: true },
+    // },
     {
       path: "/401",
       name: "login-required",

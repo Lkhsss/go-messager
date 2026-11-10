@@ -117,6 +117,9 @@ function rankClass(index: number): string {
               <p class="truncate font-medium">{{ renderEmojiText(entry.post.title) }}</p>
               <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-base-content/45">
                 <span class="truncate">{{ entry.post.user }}</span>
+                <span v-if="entry.post.user_level"
+                  class="badge badge-sm shrink-0 rounded-full border-primary/30 bg-primary/10 font-mono text-primary"
+                  :title="`等级 ${entry.post.user_level}`">Lv.{{ entry.post.user_level }}</span>
                 <span v-if="entry.post.private" class="badge badge-warning badge-sm">Private</span>
                 <span v-for="tag in entry.post.tags" :key="tag.ID" class="badge badge-sm" :style="tagBadgeStyle(tag)">
                   #{{ tag.name }}

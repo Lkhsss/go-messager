@@ -6,10 +6,12 @@ import CommentNode from '@/components/CommentNode.vue'
 import { useRoute } from 'vue-router'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 const route = useRoute()
 const auth = useAuthStore()
 const loginPrompt = useLoginPromptStore()
+const toast = useToastStore()
 
 const props = defineProps<{ postId: number }>()
 
@@ -76,7 +78,11 @@ async function submitComment() {
   submitting.value = true
   errorMsg.value = ''
   try {
-    await createComment(props.postId, content)
+    const created = await createComment(props.postId, content)
+    if (created.xp) {
+      auth.applyExperience(created.xp.exp, created.xp.level)
+      toast.notifyXp(created.xp)
+    }
     body.value = ''
     await loadComments()
   } catch (err) {

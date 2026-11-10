@@ -1,4 +1,5 @@
 import http, { type ApiResponse } from "./http";
+import type { XPGain } from "./experience";
 
 export type ReactionType =
   | "like"
@@ -20,6 +21,8 @@ export interface ReactionSummary {
 export interface ReactionResult {
   reactions: ReactionSummary;
   my_reactions: ReactionType[];
+  // 新增反应获得的每日互动经验。
+  xp?: XPGain;
 }
 
 export interface ReactionOption {

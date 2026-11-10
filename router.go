@@ -39,6 +39,7 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	authed := g.Group("")
 	authed.Use(data.AuthRequired())
 	authed.GET("/me", data.Me)
+	authed.GET("/me/experience", data.GetExperience)
 	authed.PUT("/me/avatar", data.UpdateAvatar)
 	authed.DELETE("/me/avatar", data.DeleteAvatar)
 	authed.POST("/post/new", data.NewPost)

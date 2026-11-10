@@ -1,6 +1,7 @@
 import http, { type ApiResponse, type PaginationMeta } from "./http";
 import type { TagItem } from "./tag";
 import type { ReactionSummary, ReactionType } from "./reaction";
+import type { XPGain } from "./experience";
 
 // 对应 Go 端 Post，gorm 字段首字母大写。
 export interface PostItem {
@@ -21,10 +22,14 @@ export interface PostItem {
   root_id?: number | null;
   // 作者头像版本。
   user_avatar_version?: string;
+  // 作者等级。
+  user_level?: number;
   tags?: TagItem[];
   // 反应汇总和我的反应。
   reactions?: ReactionSummary;
   my_reactions?: ReactionType[];
+  // 本次操作获得的经验。
+  xp?: XPGain;
 }
 
 export interface CommentItem extends PostItem {
