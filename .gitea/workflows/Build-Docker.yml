@@ -64,7 +64,7 @@ jobs:
         with:
           go-version-file: go.mod
           # 缓存 GOMODCACHE + GOCACHE，key 使用 go.sum。
-          cache: true
+          cache: false
           cache-dependency-path: go.sum
           # 仅影响 Go 工具链下载。
           go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
@@ -79,7 +79,7 @@ jobs:
           version: 11
           runtime: node@24
           working-directory: template
-          cache: true
+          cache: false
           cache-dependency-path: template/pnpm-lock.yaml
           install: false
 

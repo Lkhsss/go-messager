@@ -1,0 +1,37 @@
+name: Build Docker TEST
+
+run-name: 构建测试 · ${{ github.ref_name }}
+
+# 推送 vX.Y.Z 形式的标签时发布镜像；也可以在 Actions 页面手动触发
+on: [workflow_dispatch]
+
+jobs:
+  setup:
+    name: 安装环境
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 配置 registry 镜像
+        shell: bash
+        run: |
+          set -euo pipefail
+          REGISTRY="https://registry.npmmirror.com"
+          touch .npmrc
+          # 删除已有的 registry 行（兼容缩进和尾部空白）
+          sed -i.bak '/^[[:space:]]*registry[[:space:]]*=/d' .npmrc && rm -f .npmrc.bak
+          # 追加新的 registry 配置
+          echo "registry=${REGISTRY}" >> .npmrc
+          echo "----- .npmrc -----"
+          cat .npmrc
+
+      - name: 安装 pnpm 和 Node.js
+        uses: pnpm/setup@v3
+        env:
+        with:
+          version: 11
+          runtime: node@24
+          working-directory: template
+          cache-dependency-path: template/pnpm-lock.yaml
+          install: false
