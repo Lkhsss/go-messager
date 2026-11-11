@@ -42,7 +42,7 @@ env:
   RUNTIME_IMAGE: ${{ vars.RUNTIME_IMAGE || '' }}
 
 jobs:
-  test:
+  setup:
     name: 测试与前端构建
     runs-on: ubuntu-latest
     steps:
@@ -64,7 +64,7 @@ jobs:
         with:
           go-version-file: go.mod
           # 缓存 GOMODCACHE + GOCACHE，key 使用 go.sum。
-          cache: false
+          cache: true
           cache-dependency-path: go.sum
           # 仅影响 Go 工具链下载。
           go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
@@ -72,15 +72,15 @@ jobs:
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
         env:
-          # 该 action 从 npm registry 下载 pnpm，两个变量都要设。
-          npm_config_registry: ${{ env.NPM_REGISTRY }}
-          pnpm_config_registry: ${{ env.NPM_REGISTRY }}
+          npm_config_registry: https://registry.npmmirror.com
+          pnpm_config_registry: https://registry.npmmirror.com
         with:
+          registry: https://registry.npmmirror.com
           version: 11
-          runtime: node@24
+          runtime: node@26
           working-directory: template
-          cache: false
           cache-dependency-path: template/pnpm-lock.yaml
+          cache: true
           install: false
 
       - name: 显示缓存目录（便于确认缓存是否命中）
@@ -97,7 +97,6 @@ jobs:
       - name: 安装前端依赖
         working-directory: template
         env:
-          # 镜像源同时用 env 和 --registry 指定，避免 .npmrc 覆盖。
           npm_config_registry: ${{ env.NPM_REGISTRY }}
           pnpm_config_registry: ${{ env.NPM_REGISTRY }}
         # 缓存命中时不联网校验。
@@ -113,7 +112,7 @@ jobs:
   docker:
     name: 构建并推送镜像
     runs-on: ubuntu-latest
-    needs: test
+    needs: setup
     steps:
       - name: 拉取代码
         uses: actions/checkout@v7

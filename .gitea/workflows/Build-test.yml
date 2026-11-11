@@ -1,6 +1,6 @@
 name: Build Docker TEST
 
-run-name: 构建测试 · ${{ github.ref_name }}
+run-name: 构建测试 · ${{ gitea.sha }}
 
 # 推送 vX.Y.Z 形式的标签时发布镜像；也可以在 Actions 页面手动触发
 on: [workflow_dispatch]
