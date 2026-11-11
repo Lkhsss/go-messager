@@ -30,6 +30,7 @@ jobs:
         uses: pnpm/setup@v3
         env:
           COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
+          COREPACK_HOME: ${{ runner.temp }}/corepack-cache
         with:
           version: 11
           runtime: node@24
