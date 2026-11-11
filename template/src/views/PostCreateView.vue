@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createPost, fetchPost, updatePost } from '@/api/post'
 import TagPicker from '@/components/TagPicker.vue'
 import type { TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
 import { renderMarkdown } from '@/utils/markdown'
+import { clearPostDraft, readPostDraft, savePostDraft } from '@/utils/postDraft'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 
@@ -13,6 +14,8 @@ import { useToastStore } from '@/stores/toast'
 const MAX_TAGS = 5
 // 与后端 maxPostBodyRunes 保持一致
 const MAX_BODY = 100000
+// 停止输入后多久静默落盘草稿
+const DRAFT_SAVE_DELAY_MS = 800
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +47,136 @@ const showPreview = ref(false)
 const previewHtml = computed(() => renderMarkdown(form.body))
 const bodyLength = computed(() => Array.from(form.body).length)
 
+// 草稿状态：draftExists 控制「清除草稿」按钮，draftRestored 控制恢复提示。
+const draftExists = ref(false)
+const draftRestored = ref(false)
+const clearDraftDialog = ref<HTMLDialogElement | null>(null)
+
+let draftTimer: number | undefined
+// 发布成功后不再写草稿，避免离开页面时把已发布内容又存回来。
+let draftPublished = false
+
+function draftUserName(): string {
+  return auth.user?.name ?? ''
+}
+
+// 标签用快照保存：标签之后被删，恢复草稿时仍能显示名字和颜色。
+function draftTags(): TagItem[] {
+  return selectedIds.value
+    .map((id) => knownTags.value.find((tag) => tag.ID === id))
+    .filter((tag): tag is TagItem => Boolean(tag))
+}
+
+function draftHasContent(): boolean {
+  return (
+    form.title.trim() !== '' ||
+    form.subtitle.trim() !== '' ||
+    form.body.trim() !== '' ||
+    selectedIds.value.length > 0
+  )
+}
+
+// 静默保存；内容清空时顺手删掉旧草稿。
+function saveDraftNow() {
+  if (isEdit.value || draftPublished) return
+
+  const name = draftUserName()
+  if (!name) return
+
+  if (!draftHasContent()) {
+    clearPostDraft(name)
+    draftExists.value = false
+    return
+  }
+
+  const saved = savePostDraft(name, {
+    title: form.title,
+    subtitle: form.subtitle,
+    body: form.body,
+    tags: draftTags(),
+  })
+  if (saved) {
+    draftExists.value = true
+  }
+}
+
+function scheduleDraftSave() {
+  if (isEdit.value || draftPublished) return
+  if (draftTimer !== undefined) {
+    window.clearTimeout(draftTimer)
+  }
+  draftTimer = window.setTimeout(() => {
+    draftTimer = undefined
+    saveDraftNow()
+  }, DRAFT_SAVE_DELAY_MS)
+}
+
+// 关闭页面、切到后台或站内跳转前立即落盘，避免丢最后一段输入。
+function flushDraft() {
+  if (draftTimer !== undefined) {
+    window.clearTimeout(draftTimer)
+    draftTimer = undefined
+  }
+  saveDraftNow()
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    flushDraft()
+  }
+}
+
+function restoreDraft() {
+  if (isEdit.value) return
+
+  const draft = readPostDraft(draftUserName())
+  if (!draft) return
+
+  form.title = draft.title
+  form.subtitle = draft.subtitle
+  form.body = draft.body
+  knownTags.value = draft.tags
+  selectedIds.value = draft.tags.map((tag) => tag.ID)
+  draftExists.value = true
+  draftRestored.value = true
+}
+
+function dropDraft() {
+  if (draftTimer !== undefined) {
+    window.clearTimeout(draftTimer)
+    draftTimer = undefined
+  }
+
+  const name = draftUserName()
+  if (name) {
+    clearPostDraft(name)
+  }
+  draftExists.value = false
+  draftRestored.value = false
+}
+
+function openClearDraft() {
+  if (!clearDraftDialog.value?.open) {
+    clearDraftDialog.value?.showModal()
+  }
+}
+
+function closeClearDraft() {
+  clearDraftDialog.value?.close()
+}
+
+function confirmClearDraft() {
+  dropDraft()
+  form.title = ''
+  form.subtitle = ''
+  form.body = ''
+  selectedIds.value = []
+  knownTags.value = []
+  errorMsg.value = ''
+  showPreview.value = false
+  closeClearDraft()
+}
+
 function toggleTag(tag: TagItem) {
   if (selectedIds.value.includes(tag.ID)) {
     selectedIds.value = selectedIds.value.filter((id) => id !== tag.ID)
@@ -53,6 +186,10 @@ function toggleTag(tag: TagItem) {
   if (selectedIds.value.length >= MAX_TAGS) {
     errorMsg.value = `最多选择 ${MAX_TAGS} 个标签`
     return
+  }
+  // 记住标签快照，草稿保存和恢复时都能取到完整信息。
+  if (!knownTags.value.some((item) => item.ID === tag.ID)) {
+    knownTags.value = [...knownTags.value, tag]
   }
   selectedIds.value = [...selectedIds.value, tag.ID]
   errorMsg.value = ''
@@ -96,8 +233,26 @@ async function loadPost() {
 onMounted(() => {
   if (isEdit.value) {
     void loadPost()
+  } else {
+    // 上次没发布就离开：自动恢复草稿。
+    restoreDraft()
   }
+
+  // 移动端切后台不一定触发 beforeunload，用 pagehide/visibilitychange 兜底。
+  window.addEventListener('pagehide', flushDraft)
+  window.addEventListener('beforeunload', flushDraft)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', flushDraft)
+  window.removeEventListener('beforeunload', flushDraft)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  flushDraft()
+})
+
+// 输入或标签变化后静默保存。
+watch([() => form.title, () => form.subtitle, () => form.body, selectedIds], scheduleDraftSave)
 
 async function onSubmit() {
   if (submitting.value) return
@@ -125,6 +280,9 @@ async function onSubmit() {
       await router.replace('/my-posts')
     } else {
       const created = await createPost(input)
+      // 发布成功：草稿作废，并且不再随卸载写回。
+      draftPublished = true
+      dropDraft()
       if (created.xp) {
         auth.applyExperience(created.xp.exp, created.xp.level)
         toast.notifyXp(created.xp)
@@ -157,6 +315,11 @@ async function onSubmit() {
 
     <form v-else class="card bg-base-100 shadow-sm" novalidate @submit.prevent="onSubmit">
       <div class="card-body gap-4">
+        <!-- 上次未发布的草稿已自动恢复 -->
+        <div v-if="draftRestored" role="status" class="alert alert-info alert-soft py-2 text-sm">
+          <span>已恢复上次未发布的草稿，发布后会自动清除。</span>
+        </div>
+
         <label class="floating-label">
           <span>标题</span>
           <input v-model="form.title" type="text" name="title" placeholder="请输入标题" maxlength="120"
@@ -209,7 +372,9 @@ async function onSubmit() {
           <span>{{ errorMsg }}</span>
         </div>
 
-        <div class="card-actions justify-end">
+        <div class="card-actions items-center justify-end">
+          <button v-if="!isEdit && draftExists" type="button" class="btn btn-ghost btn-sm text-error"
+            :disabled="submitting" @click="openClearDraft">清除草稿</button>
           <button type="submit" class="btn btn-primary" :disabled="submitting">
             <span v-if="submitting" class="loading loading-spinner loading-sm"></span>
             {{ isEdit ? '保存修改' : '发布' }}
@@ -217,9 +382,18 @@ async function onSubmit() {
         </div>
       </div>
     </form>
+
+    <!-- 清除草稿确认弹窗 -->
+    <dialog ref="clearDraftDialog" class="modal">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold">清除草稿</h3>
+        <p class="mt-3 text-sm text-base-content/70">当前标题、正文和标签选择都会被清空，且无法恢复。</p>
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" @click="closeClearDraft">取消</button>
+          <button type="button" class="btn btn-error" @click="confirmClearDraft">清除</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
   </main>
 </template>
-
-
-
-
