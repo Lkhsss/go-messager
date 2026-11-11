@@ -5,16 +5,18 @@ import (
 	"gorm.io/gorm"
 )
 
-func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
+func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 	data, err := NewData(db, cfg.JWT)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data.AccessMode = cfg.Access.Mode
 	if data.AccessMode == "" {
 		data.AccessMode = AccessModePrivate
 	}
+
+	data.CaptchaEnabled = cfg.Captcha.Enabled
 
 	g := r.Group("/api")
 
@@ -24,6 +26,8 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	// 公开
 	g.GET("/status", data.Status)    // 是否已初始化（有没有第一个用户）
 	g.GET("/avatar", data.GetAvatar) // 公开：<img> 无法携带 Bearer
+	g.GET("/captcha", data.GetCaptcha)
+	g.POST("/captcha/verify", data.VerifyCaptcha)
 	g.POST("/authorize", data.Authorize)
 	g.POST("/register", data.Register)
 	g.GET("/uptime", data.Uptime)
@@ -60,6 +64,7 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	admin.PATCH("/admin/users/:id/status", data.SetAdminUserStatus)
 	admin.PUT("/admin/users/:id/password", data.SetAdminUserPassword)
 	admin.DELETE("/admin/users/:id", data.DeleteAdminUser)
+	admin.DELETE("/admin/users/:id/posts", data.ClearAdminUserPosts)
 	admin.GET("/admin/maintenance", data.GetMaintenance)
 	admin.PUT("/admin/maintenance", data.UpdateMaintenance)
 
@@ -70,5 +75,5 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	authed.POST("/post/:id/comments", data.CreateComment)
 	authed.GET("/me/stats", data.GetMyStats)
 	admin.GET("/admin/stats", data.GetAdminStats)
-	return nil
+	return data, nil
 }

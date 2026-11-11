@@ -21,6 +21,7 @@ import (
 type testEnv struct {
 	router *gin.Engine
 	db     *gorm.DB
+	data   *Data
 }
 
 type apiResponse struct {
@@ -65,11 +66,12 @@ func newTestEnvWithAccessMode(t *testing.T, accessMode string) *testEnv {
 	cfg := DefaultConfig()
 	cfg.JWT.Secret = "test-secret"
 	cfg.Access.Mode = accessMode
-	if err := api(r, db, cfg); err != nil {
+	data, err := api(r, db, cfg)
+	if err != nil {
 		t.Fatalf("挂载路由失败：%v", err)
 	}
 
-	return &testEnv{router: r, db: db}
+	return &testEnv{router: r, db: db, data: data}
 }
 
 func (e *testEnv) do(t *testing.T, method, path, token string, body any) (int, apiResponse) {
@@ -106,7 +108,18 @@ func (e *testEnv) do(t *testing.T, method, path, token string, body any) (int, a
 func (e *testEnv) register(t *testing.T, name, password string) AuthResult {
 	t.Helper()
 
-	code, resp := e.do(t, http.MethodPost, "/api/register", "", Credentials{Name: name, Password: password})
+	body := RegisterInput{Name: name, Password: password}
+
+	// 首个用户免人机验证，其余注册先走一遍完整验证流程。
+	var count int64
+	if err := e.db.Model(&User{}).Count(&count).Error; err != nil {
+		t.Fatalf("查询用户数失败：%v", err)
+	}
+	if count > 0 {
+		body.CaptchaTicket = e.solveCaptcha(t)
+	}
+
+	code, resp := e.do(t, http.MethodPost, "/api/register", "", body)
 	if code != http.StatusCreated {
 		t.Fatalf("注册[%s]期望 201，实际 %d：%s", name, code, describe(resp))
 	}
@@ -116,6 +129,31 @@ func (e *testEnv) register(t *testing.T, name, password string) AuthResult {
 		t.Fatalf("解析注册响应失败：%v", err)
 	}
 	return result
+}
+
+// solveCaptcha 取一道验证码，读出答案后校验，返回可用 ticket。
+// 只读内部答案，校验与签发仍走真实接口。
+func (e *testEnv) solveCaptcha(t *testing.T) string {
+	t.Helper()
+
+	code, resp := e.do(t, http.MethodGet, "/api/captcha", "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("获取验证码期望 200，实际 %d：%s", code, describe(resp))
+	}
+	challenge := decode[CaptchaChallenge](t, resp)
+
+	answer, ok := e.data.captcha.peekAnswer(challenge.ID)
+	if !ok {
+		t.Fatalf("验证码[%s]不存在", challenge.ID)
+	}
+
+	code, resp = e.do(t, http.MethodPost, "/api/captcha/verify", "",
+		captchaVerifyInput{ID: challenge.ID, Answer: answer})
+	if code != http.StatusOK {
+		t.Fatalf("校验验证码期望 200，实际 %d：%s", code, describe(resp))
+	}
+
+	return decode[CaptchaTicket](t, resp).Ticket
 }
 
 func (e *testEnv) createTag(t *testing.T, token, name string) Tag {

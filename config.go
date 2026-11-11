@@ -37,6 +37,7 @@ type Config struct {
 	Access   AccessConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
+	Captcha  CaptchaConfig
 }
 
 // ServerConfig HTTP 配置。
@@ -67,6 +68,12 @@ type JWTConfig struct {
 	TTL    time.Duration
 }
 
+// CaptchaConfig 注册人机验证配置。
+type CaptchaConfig struct {
+	// 关闭后注册接口不再要求验证码 ticket。
+	Enabled bool
+}
+
 // DefaultConfig 默认配置。
 func DefaultConfig() *Config {
 	return &Config{
@@ -82,6 +89,9 @@ func DefaultConfig() *Config {
 		},
 		JWT: JWTConfig{
 			TTL: defaultJWTTTL,
+		},
+		Captcha: CaptchaConfig{
+			Enabled: true,
 		},
 	}
 }
@@ -145,6 +155,15 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.JWT.TTL = ttl
+
+	// 人机验证默认开启，只有显式配置为 false 才关闭。
+	if raw := strings.TrimSpace(f.Section("captcha").Key("enabled").String()); raw != "" {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("配置项 [captcha] enabled 无效[%s]：可选 true、false", raw)
+		}
+		cfg.Captcha.Enabled = enabled
+	}
 
 	return cfg, nil
 }

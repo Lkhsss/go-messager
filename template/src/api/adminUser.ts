@@ -102,3 +102,21 @@ export async function deleteAdminUser(id: number): Promise<void> {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "删除用户失败" };
   }
 }
+
+export interface ClearAdminUserPostsResult {
+  // 删除的文章数。
+  deleted: number;
+  // 随之删除的评论与回复数。
+  comments: number;
+}
+
+// 清空指定用户的全部文章及其下的评论。
+export async function clearAdminUserPosts(id: number): Promise<ClearAdminUserPostsResult> {
+  const { data } = await http.delete<ApiResponse<ClearAdminUserPostsResult>>(
+    `/admin/users/${id}/posts`,
+  );
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "清空用户文章失败" };
+  }
+  return data.data;
+}

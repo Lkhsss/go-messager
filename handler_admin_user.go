@@ -255,6 +255,66 @@ func (d *Data) DeleteAdminUser(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
 }
 
+// ClearAdminUserPosts 删除指定用户的全部文章及其下的评论 DELETE /api/admin/users/:id/posts
+func (d *Data) ClearAdminUserPosts(c *gin.Context) {
+	id, ok := parseAdminUserID(c)
+	if !ok {
+		return
+	}
+
+	var target User
+	if err := d.DB.Take(&target, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if target.Role == RoleAdmin {
+		Response{}.Fail(c, http.StatusBadRequest, "CANNOT_CLEAR_ADMIN", "不能清空管理员的文章")
+		return
+	}
+
+	var articleIDs []uint
+	if err := d.DB.Model(&Post{}).
+		Where("user = ? AND root_id IS NULL", target.Name).
+		Pluck("id", &articleIDs).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if len(articleIDs) == 0 {
+		Response{}.Ok(c, http.StatusOK, gin.H{"deleted": 0, "comments": 0})
+		return
+	}
+
+	var comments int64
+	if err := d.DB.Transaction(func(tx *gorm.DB) error {
+		// 文章下的评论与回复一起删除，避免留下访问不到的孤儿数据。
+		result := tx.Where("root_id IN ?", articleIDs).Delete(&Post{})
+		if result.Error != nil {
+			return result.Error
+		}
+		comments = result.RowsAffected
+
+		if err := tx.Where("id IN ?", articleIDs).Delete(&Post{}).Error; err != nil {
+			return err
+		}
+
+		return syncTagUsageCounts(tx)
+	}); err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "DELETE_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, gin.H{
+		"deleted":  len(articleIDs),
+		"comments": comments,
+	})
+}
+
 func parseAdminUserID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil || id == 0 {

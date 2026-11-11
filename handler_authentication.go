@@ -87,7 +87,7 @@ func (d *Data) Authorize(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, result)
 }
 
-// Register 首个用户自动成为 admin。
+// Register 注册；首个用户自动成为 admin，且免人机验证。
 func (d *Data) Register(c *gin.Context) {
 	var req RegisterInput
 	if err := c.ShouldBind(&req); err != nil {
@@ -101,17 +101,17 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
+	// 用户总数同时用于维护模式和首用户判断，只查一次。
+	var userCount int64
+	if err := d.DB.Model(&User{}).Count(&userCount).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "COUNT_FAILED", err.Error())
+		return
+	}
+
 	// 维护模式下停止注册；全新库没有用户时放行，避免无法初始化管理员。
-	if state := d.MaintenanceState(); state.Enabled {
-		var count int64
-		if err := d.DB.Model(&User{}).Count(&count).Error; err != nil {
-			Response{}.Fail(c, http.StatusInternalServerError, "COUNT_FAILED", err.Error())
-			return
-		}
-		if count > 0 {
-			Response{}.Fail(c, http.StatusServiceUnavailable, "MAINTENANCE", state.Title)
-			return
-		}
+	if state := d.MaintenanceState(); state.Enabled && userCount > 0 {
+		Response{}.Fail(c, http.StatusServiceUnavailable, "MAINTENANCE", state.Title)
+		return
 	}
 
 	exists, err := d.IfUserExist(req.Name)
@@ -121,6 +121,12 @@ func (d *Data) Register(c *gin.Context) {
 	}
 	if exists {
 		Response{}.Fail(c, http.StatusConflict, "USER_EXIST", "用户已存在")
+		return
+	}
+
+	// 非首个用户必须带人机验证签发的 ticket；ticket 一次性，用后即作废。
+	if d.CaptchaEnabled && userCount > 0 && !d.captcha.ConsumeTicket(req.CaptchaTicket) {
+		Response{}.Fail(c, http.StatusBadRequest, "CAPTCHA_REQUIRED", "请先完成人机验证")
 		return
 	}
 

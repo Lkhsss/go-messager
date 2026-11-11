@@ -7,6 +7,11 @@ export interface Credentials {
   password: string;
 }
 
+// 注册请求额外带上人机验证 ticket；首个管理员初始化时不需要。
+export interface RegisterCredentials extends Credentials {
+  captcha_ticket?: string;
+}
+
 export interface AuthResult {
   token: string;
   expires_at: string;
@@ -25,7 +30,7 @@ export async function authorize(credentials: Credentials): Promise<AuthResult> {
 }
 
 // 注册，首个用户是管理员。
-export async function register(credentials: Credentials): Promise<AuthResult> {
+export async function register(credentials: RegisterCredentials): Promise<AuthResult> {
   const { data } = await http.post<ApiResponse<AuthResult>>("/register", credentials);
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "注册失败" };

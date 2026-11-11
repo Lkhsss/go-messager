@@ -31,6 +31,12 @@ type Data struct {
 	// 站点访问模式：private / public，空值按 private 处理。
 	AccessMode string
 
+	// 注册人机验证开关，关闭时注册不再要求 ticket。
+	CaptchaEnabled bool
+
+	// 验证码与一次性 ticket 的内存存储。
+	captcha *CaptchaStore
+
 	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
 
@@ -88,7 +94,7 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 		return nil, err
 	}
 
-	d := &Data{DB: db, JWTTTL: ttl}
+	d := &Data{DB: db, JWTTTL: ttl, captcha: NewCaptchaStore()}
 
 	secret, err := ensureJWTSecret(db, cfg.Secret)
 	if err != nil {

@@ -88,6 +88,8 @@ type Credentials struct {
 type RegisterInput struct {
 	Name     string `json:"name" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	// 人机验证通过后拿到的一次性凭证，首个管理员可省略。
+	CaptchaTicket string `json:"captcha_ticket"`
 }
 
 // AvatarInput 头像 data URL。

@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.5.1
+v0.6.1
 
 Go语言制作的极简论坛
 
@@ -42,6 +42,7 @@ Copy-Item conf/app.min.ini conf/app.ini
 | `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
 | `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
 | `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                                                      |
+| `captcha.enabled` | `true`         | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                        |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
@@ -63,6 +64,15 @@ docker run -d --name go-messager -p 8080:8080 \
   ghcr.io/<owner>/go-messager:latest
 ```
 
+## 注册人机验证
+
+新用户注册前需要先完成图形验证码，通过后服务端签发一次性 ticket，注册接口凭 ticket 完成创建；全新库初始化首个管理员时豁免，避免首次部署被锁死。
+
+- 前端独立页面 `/verify`：点击图片或「换一张」刷新，显示剩余有效期并在过期后自动换图；验证通过后带 ticket 回到注册页，ticket 存在 `sessionStorage`，有效期 5 分钟且只能用一次。
+- 接口：`GET /api/captcha` 返回 PNG data URL 和有效期（2 分钟，答案不落在响应文本里）；`POST /api/captcha/verify` 校验后返回 ticket。
+- 防刷：同一道题最多 5 次错误机会；生成 30 次/分钟/IP、校验 20 次/分钟/IP，超出分别返回 `CAPTCHA_TOO_MANY_ATTEMPTS`、`CAPTCHA_RATE_LIMITED`。
+- 验证码和 ticket 保存在进程内存中，重启后前端重新验证即可；需要关闭时设置 `[captcha] enabled = false`。
+
 ## 维护模式
 
 管理员可在「管理 → 维护模式」开启站点维护：
@@ -72,7 +82,7 @@ docker run -d --name go-messager -p 8080:8080 \
 - 管理员在管理页关闭后立即恢复；停留在维护页的用户每 15 秒自动检测，恢复后跳回首页。
 - 状态保存在数据库 `settings` 表（key 为 `maintenance`），重启后保留。
 
-维护期间仍可访问的接口：`GET /api/status`（维护页和前端守卫读取状态）、`GET /api/uptime`（容器健康检查）、`POST /api/authorize`（管理员登录以恢复站点）、`POST /api/register`（仅当数据库还没有用户时用于初始化管理员，其余情况返回 503）。
+维护期间仍可访问的接口：`GET /api/status`（维护页和前端守卫读取状态）、`GET /api/uptime`（容器健康检查）、`GET /api/captcha` 与 `POST /api/captcha/verify`（注册页取题和校验）、`POST /api/authorize`（管理员登录以恢复站点）、`POST /api/register`（仅当数据库还没有用户时用于初始化管理员，其余情况返回 503）。
 
 ## 镜像构建
 
@@ -124,6 +134,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 15. [x] 最小配置/docker配置
 16. [x] 等级系统 lkhsss/go-messager#1
 17. [ ] 用户管理界面显示等级和经验条
+18. [x] 一键清除某个用户文章
 
 # FIXME
 

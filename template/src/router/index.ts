@@ -38,6 +38,13 @@ const router = createRouter({
       meta: { layout: "blank", guestOnly: true, skipMaintenance: true },
     },
     {
+      path: "/verify",
+      name: "verify",
+      component: () => import("@/views/VerifyView.vue"),
+      // 注册前的人机验证页：游客专用，验证通过后带着 ticket 回到注册页。
+      meta: { layout: "blank", guestOnly: true, skipMaintenance: true },
+    },
+    {
       path: "/maintenance",
       name: "maintenance",
       component: () => import("@/views/MaintenanceView.vue"),

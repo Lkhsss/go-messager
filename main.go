@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// 注册 API。
-	if err := api(r, db, cfg); err != nil {
+	if _, err := api(r, db, cfg); err != nil {
 		panic(err)
 	}
 

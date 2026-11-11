@@ -7,6 +7,7 @@ import {
   removeAvatar as removeAvatarApi,
   updateAvatar as updateAvatarApi,
   type Credentials,
+  type RegisterCredentials,
 } from "@/api/auth";
 import { clearAuth, readAuth, writeAuth, type AuthUser, type StoredAuth } from "@/api/authStorage";
 import { isApiError } from "@/api/http";
@@ -51,7 +52,7 @@ export const useAuthStore = defineStore("auth", () => {
     return result;
   }
 
-  async function signup(credentials: Credentials) {
+  async function signup(credentials: RegisterCredentials) {
     const result = await register(credentials);
     setAuth({ token: result.token, expiresAt: result.expires_at, user: result.user });
     return result;

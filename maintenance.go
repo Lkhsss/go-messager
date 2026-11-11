@@ -110,12 +110,13 @@ func (d *Data) IsMaintenance() bool {
 
 // maintenanceAllowlist 维护期间仍需放行的接口：
 // 状态查询给维护页和前端守卫、运行时长给容器健康检查、登录给管理员恢复现场。
-// 注册也放行到 handler 里判断：全新库没有用户时允许初始化首个管理员。
+// 验证码用于注册页提前取题；注册本身也放行到 handler 里判断，
+// 全新库没有用户时允许初始化首个管理员。
 func maintenanceAllowlist(method, path string) bool {
 	switch path {
-	case "/api/status", "/api/uptime":
+	case "/api/status", "/api/uptime", "/api/captcha":
 		return method == http.MethodGet
-	case "/api/authorize", "/api/register":
+	case "/api/authorize", "/api/register", "/api/captcha/verify":
 		return method == http.MethodPost
 	}
 

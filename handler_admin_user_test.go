@@ -190,3 +190,105 @@ func TestAdminUserManagement(t *testing.T) {
 		t.Fatalf("删除管理员应 400，实际 %d：%s", code, describe(resp))
 	}
 }
+
+func TestAdminClearUserPosts(t *testing.T) {
+	env := newTestEnv(t)
+
+	admin := env.register(t, "admin", "admin123")
+	bob := env.register(t, "bob", "bob12345")
+	alice := env.register(t, "alice", "alice123")
+
+	bobPost := env.createPost(t, bob.Token, PostInput{Title: "违规文章", Body: "body"})
+	bobPost2 := env.createPost(t, bob.Token, PostInput{Title: "违规文章 2", Body: "body"})
+	alicePost := env.createPost(t, alice.Token, PostInput{Title: "正常文章", Body: "body"})
+
+	// bob 文章下的评论与回复。
+	code, resp := env.do(t, http.MethodPost, "/api/post/"+idString(bobPost.ID)+"/comments", alice.Token,
+		CommentInput{Body: "评论"})
+	if code != http.StatusCreated {
+		t.Fatalf("评论应 201，实际 %d：%s", code, describe(resp))
+	}
+	comment := decode[Post](t, resp)
+
+	code, resp = env.do(t, http.MethodPost, "/api/post/"+idString(bobPost.ID)+"/comments", bob.Token,
+		CommentInput{Body: "回复", ParentID: &comment.ID})
+	if code != http.StatusCreated {
+		t.Fatalf("回复应 201，实际 %d：%s", code, describe(resp))
+	}
+
+	// bob 在 alice 文章下的评论应保留。
+	code, resp = env.do(t, http.MethodPost, "/api/post/"+idString(alicePost.ID)+"/comments", bob.Token,
+		CommentInput{Body: "他人文章下的评论"})
+	if code != http.StatusCreated {
+		t.Fatalf("alice 文章评论应 201，实际 %d：%s", code, describe(resp))
+	}
+
+	var bobRecord User
+	if err := env.db.Where("name = ?", "bob").Take(&bobRecord).Error; err != nil {
+		t.Fatalf("查询 bob 失败：%v", err)
+	}
+
+	// 普通用户无权清空他人文章。
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/"+idString(bobRecord.ID)+"/posts", alice.Token, nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("普通用户清空文章应 403，实际 %d：%s", code, describe(resp))
+	}
+
+	// 管理员清空 bob 的文章。
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/"+idString(bobRecord.ID)+"/posts", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("清空文章应 200，实际 %d：%s", code, describe(resp))
+	}
+	result := decode[struct {
+		Deleted  int   `json:"deleted"`
+		Comments int64 `json:"comments"`
+	}](t, resp)
+	if result.Deleted != 2 || result.Comments != 2 {
+		t.Fatalf("清空结果异常：%+v", result)
+	}
+
+	// bob 的文章及文章下的评论都不再可见。
+	for _, path := range []string{
+		"/api/post/" + idString(bobPost.ID),
+		"/api/post/" + idString(bobPost2.ID),
+	} {
+		if code, resp = env.do(t, http.MethodGet, path, bob.Token, nil); code != http.StatusNotFound {
+			t.Fatalf("%s 应 404，实际 %d：%s", path, code, describe(resp))
+		}
+	}
+	if code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(bobPost.ID)+"/comments", bob.Token, nil); code != http.StatusNotFound {
+		t.Fatalf("bob 文章评论应 404，实际 %d：%s", code, describe(resp))
+	}
+
+	// alice 的文章保留，bob 在其中的评论也保留。
+	if code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(alicePost.ID), alice.Token, nil); code != http.StatusOK {
+		t.Fatalf("alice 文章应保留，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(alicePost.ID)+"/comments", alice.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("alice 文章评论应 200，实际 %d：%s", code, describe(resp))
+	}
+	if kept := decode[[]Post](t, resp); len(kept) != 1 {
+		t.Fatalf("alice 文章应保留 1 条评论，实际 %d：%+v", len(kept), kept)
+	}
+
+	// 用户列表统计同步更新：文章归零，评论只剩他人文章下的 1 条。
+	code, resp = env.do(t, http.MethodGet, "/api/admin/users?q=bob", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("用户列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	bobItem := findAdminUser(decode[[]AdminUserListItem](t, resp), "bob")
+	if bobItem == nil || bobItem.PostCount != 0 || bobItem.CommentCount != 1 {
+		t.Fatalf("bob 统计异常：%+v", bobItem)
+	}
+
+	// 管理员账号的文章不能被清空。
+	var adminRecord User
+	if err := env.db.Where("name = ?", "admin").Take(&adminRecord).Error; err != nil {
+		t.Fatalf("查询管理员失败：%v", err)
+	}
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/"+idString(adminRecord.ID)+"/posts", admin.Token, nil)
+	if code != http.StatusBadRequest {
+		t.Fatalf("清空管理员文章应 400，实际 %d：%s", code, describe(resp))
+	}
+}

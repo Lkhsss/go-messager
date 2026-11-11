@@ -40,6 +40,9 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if cfg.JWT.TTL != defaultJWTTTL {
 		t.Fatalf("JWT TTL 默认值应为 %s，实际 %s", defaultJWTTTL, cfg.JWT.TTL)
 	}
+	if !cfg.Captcha.Enabled {
+		t.Fatal("人机验证默认应开启")
+	}
 }
 
 func TestLoadConfigFromFile(t *testing.T) {
@@ -59,6 +62,9 @@ path = ./tmp/app.db
 [jwt]
 secret = test-secret
 ttl = 2h
+
+[captcha]
+enabled = false
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("写入测试配置失败：%v", err)
@@ -80,6 +86,9 @@ ttl = 2h
 	}
 	if cfg.JWT.Secret != "test-secret" || cfg.JWT.TTL != 2*time.Hour {
 		t.Fatalf("jwt 配置解析异常：%+v", cfg.JWT)
+	}
+	if cfg.Captcha.Enabled {
+		t.Fatal("captcha.enabled = false 时人机验证应关闭")
 	}
 }
 
@@ -135,6 +144,7 @@ func TestLoadConfigInvalidValues(t *testing.T) {
 		{name: "ttl 非法", body: "[jwt]\nttl = 2d\n", want: "[jwt] ttl"},
 		{name: "mode 非法", body: "[server]\nmode = prod\n", want: "[server] mode"},
 		{name: "access mode 非法", body: "[access]\nmode = secret\n", want: "[access] mode"},
+		{name: "captcha enabled 非法", body: "[captcha]\nenabled = maybe\n", want: "[captcha] enabled"},
 	}
 
 	for _, tt := range tests {

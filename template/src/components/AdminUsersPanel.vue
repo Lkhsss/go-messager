@@ -5,6 +5,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import UserStatsCards from '@/components/UserStatsCards.vue'
 import {
   changeAdminUserPassword,
+  clearAdminUserPosts,
   deleteAdminUser,
   fetchAdminUserDetail,
   fetchAdminUsers,
@@ -37,7 +38,7 @@ const newPassword = ref('')
 const passwordSaving = ref(false)
 const passwordError = ref('')
 
-type ActionMode = 'disable' | 'enable' | 'delete'
+type ActionMode = 'disable' | 'enable' | 'delete' | 'clear-posts'
 
 const actionDialog = ref<HTMLDialogElement | null>(null)
 const actionTarget = ref<AdminUserItem | null>(null)
@@ -47,6 +48,7 @@ const actionError = ref('')
 
 const actionTitle = computed(() => {
   if (actionMode.value === 'delete') return '删除用户'
+  if (actionMode.value === 'clear-posts') return '清空文章'
   return actionMode.value === 'disable' ? '封禁用户' : '解封用户'
 })
 
@@ -221,6 +223,9 @@ async function confirmAction() {
     if (actionMode.value === 'delete') {
       await deleteAdminUser(target.id)
       successMsg.value = `用户「${target.name}」已删除`
+    } else if (actionMode.value === 'clear-posts') {
+      const result = await clearAdminUserPosts(target.id)
+      successMsg.value = `已清空「${target.name}」的 ${result.deleted} 篇文章（含 ${result.comments} 条评论）`
     } else {
       const disabled = actionMode.value === 'disable'
       await setAdminUserDisabled(target.id, disabled)
@@ -319,6 +324,9 @@ onMounted(() => {
               </button>
               <button type="button" class="btn btn-ghost btn-xs" :disabled="loading || passwordSaving"
                 @click="openPassword(user)">修改密码</button>
+              <button v-if="user.role !== 'admin' && user.post_count > 0" type="button"
+                class="btn btn-ghost btn-xs text-warning" :disabled="loading || actionSaving"
+                @click="openAction(user, 'clear-posts')">清空文章</button>
               <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs text-error"
                 :disabled="loading || actionSaving" @click="openAction(user, 'delete')">删除</button>
             </div>
@@ -412,6 +420,9 @@ onMounted(() => {
         <p v-if="actionMode === 'delete'" class="text-warning">
           只删除账号，文章和评论会保留。删除后账号不能登录，且不可恢复。
         </p>
+        <p v-else-if="actionMode === 'clear-posts'" class="text-warning">
+          将删除该用户的全部文章（{{ actionTarget?.post_count ?? 0 }} 篇）及其下的所有评论和回复，账号本身保留。文章为软删除，界面内无法恢复。
+        </p>
         <p v-else-if="actionMode === 'disable'" class="text-warning">
           封禁后该用户会立即无法登录，已登录的令牌也会失效。
         </p>
@@ -424,7 +435,8 @@ onMounted(() => {
 
       <div class="modal-action">
         <button type="button" class="btn btn-ghost" :disabled="actionSaving" @click="closeAction">取消</button>
-        <button type="button" class="btn" :class="actionMode === 'delete' ? 'btn-error' : actionMode === 'disable' ? 'btn-warning' : 'btn-primary'"
+        <button type="button" class="btn"
+          :class="actionMode === 'delete' ? 'btn-error' : actionMode === 'disable' || actionMode === 'clear-posts' ? 'btn-warning' : 'btn-primary'"
           :disabled="actionSaving" @click="confirmAction">
           <span v-if="actionSaving" class="loading loading-spinner loading-sm"></span>
           确定
