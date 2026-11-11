@@ -56,6 +56,12 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
+	// 维护模式下只允许管理员登录，方便管理员恢复站点。
+	if state := d.MaintenanceState(); state.Enabled && user.Role != RoleAdmin {
+		Response{}.Fail(c, http.StatusServiceUnavailable, "MAINTENANCE", state.Title)
+		return
+	}
+
 	token, expiresAt, err := d.issueToken(user)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "TOKEN_FAILED", err.Error())
@@ -93,6 +99,19 @@ func (d *Data) Register(c *gin.Context) {
 	if req.Name == "" || req.Password == "" {
 		Response{}.Fail(c, http.StatusBadRequest, "NEED_CREDENTIALS", "用户名和密码不能为空")
 		return
+	}
+
+	// 维护模式下停止注册；全新库没有用户时放行，避免无法初始化管理员。
+	if state := d.MaintenanceState(); state.Enabled {
+		var count int64
+		if err := d.DB.Model(&User{}).Count(&count).Error; err != nil {
+			Response{}.Fail(c, http.StatusInternalServerError, "COUNT_FAILED", err.Error())
+			return
+		}
+		if count > 0 {
+			Response{}.Fail(c, http.StatusServiceUnavailable, "MAINTENANCE", state.Title)
+			return
+		}
 	}
 
 	exists, err := d.IfUserExist(req.Name)

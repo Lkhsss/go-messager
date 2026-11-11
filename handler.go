@@ -48,5 +48,9 @@ func (d *Data) Status(c *gin.Context) {
 		mode = AccessModePrivate
 	}
 
-	Response{}.Ok(c, http.StatusOK, gin.H{"initialized": count > 0, "mode": mode})
+	Response{}.Ok(c, http.StatusOK, gin.H{
+		"initialized": count > 0,
+		"mode":        mode,
+		"maintenance": d.MaintenanceState(),
+	})
 }

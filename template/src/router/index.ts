@@ -17,6 +17,8 @@ declare module "vue-router" {
     requiresAdmin?: boolean;
     // 无需登录即可访问（如 401 提示页）。
     allowAnonymous?: boolean;
+    // 维护模式下仍然允许访问（登录、初始化、维护页）。
+    skipMaintenance?: boolean;
   }
 }
 
@@ -27,13 +29,20 @@ const router = createRouter({
       path: "/setup",
       name: "setup",
       component: () => import("@/views/SetupView.vue"),
-      meta: { layout: "blank", setupOnly: true },
+      meta: { layout: "blank", setupOnly: true, skipMaintenance: true },
     },
     {
       path: "/login",
       name: "login",
       component: () => import("@/views/LoginView.vue"),
-      meta: { layout: "blank", guestOnly: true },
+      meta: { layout: "blank", guestOnly: true, skipMaintenance: true },
+    },
+    {
+      path: "/maintenance",
+      name: "maintenance",
+      component: () => import("@/views/MaintenanceView.vue"),
+      // 维护页本身不能被维护判断再次拦截。
+      meta: { layout: "blank", skipMaintenance: true },
     },
     {
       path: "/",
@@ -128,6 +137,14 @@ router.beforeEach(async (to) => {
   // 校验 token 并同步登录态。
   const auth = useAuthStore();
   await auth.ensureSession();
+
+  // 维护模式：普通用户只能停留在维护页，管理员照常使用。
+  if (to.name === "maintenance") {
+    return system.isMaintenance || auth.isAdmin ? true : { name: "home" };
+  }
+  if (system.isMaintenance && !auth.isAdmin && !to.meta.skipMaintenance) {
+    return { name: "maintenance" };
+  }
 
   // 已登录跳过登录页。
   if (to.meta.guestOnly && auth.isLoggedIn) {

@@ -170,10 +170,11 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="card-title break-words text-lg"><router-link :to="'/post/' + post.ID" class="hover:underline">{{ renderEmojiText(post.title) }}</router-link></h2>
+                  <h2 class="card-title min-w-0 text-lg"><router-link :to="'/post/' + post.ID"
+                      class="min-w-0 break-words hover:underline">{{ renderEmojiText(post.title) }}</router-link></h2>
                   <span v-if="post.private" class="badge badge-warning badge-sm">Private</span>
                 </div>
-                <p v-if="post.subtitle" class="break-words text-sm text-base-content/60">{{ renderEmojiText(post.subtitle) }}</p>
+                <p v-if="post.subtitle" class="min-w-0 break-words text-sm text-base-content/60">{{ renderEmojiText(post.subtitle) }}</p>
                 <p class="mt-1 text-xs text-base-content/40">{{ formatDate(post.CreatedAt) }}</p>
               </div>
               <div class="flex shrink-0 items-center gap-1">
@@ -210,7 +211,7 @@ onMounted(() => {
         <h3 class="text-lg font-semibold">删除文章</h3>
 
         <div class="mt-3 space-y-3 text-sm">
-          <p>确定删除「{{ renderEmojiText(deletingPost?.title ?? '') }}」吗？</p>
+          <p class="break-words">确定删除「{{ renderEmojiText(deletingPost?.title ?? '') }}」吗？</p>
           <p class="text-base-content/60">删除后文章将不再显示，标签使用次数会自动更新。</p>
 
           <div v-if="deleteError" role="alert" class="alert alert-error alert-soft py-2 text-sm">

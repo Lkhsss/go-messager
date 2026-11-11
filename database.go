@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,10 @@ type Data struct {
 
 	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
+
+	// 维护模式状态：读多写少，用读写锁保护。
+	maintenanceMu sync.RWMutex
+	maintenance   MaintenanceState
 }
 
 // IsPublic 是否允许游客浏览文章。
@@ -90,6 +95,11 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 		return nil, err
 	}
 	d.JWTSecret = secret
+
+	// 维护模式状态存在数据库里，重启后保留；配置损坏时按关闭处理，不阻塞启动。
+	if err := d.loadMaintenanceState(); err != nil {
+		log.Printf("加载维护模式配置失败，按关闭处理：%v", err)
+	}
 
 	return d, nil
 }

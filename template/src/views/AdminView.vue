@@ -4,8 +4,9 @@ import { createTag, deleteTag, fetchTags, updateTag, type TagItem } from '@/api/
 import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
+import AdminMaintenancePanel from '@/components/AdminMaintenancePanel.vue'
 
-const activeTab = ref<'tags' | 'users'>('tags')
+const activeTab = ref<'tags' | 'users' | 'maintenance'>('tags')
 
 const tags = ref<TagItem[]>([])
 const name = ref('')
@@ -222,6 +223,8 @@ onMounted(() => {
         :aria-selected="activeTab === 'tags'" @click="activeTab = 'tags'">标签管理</button>
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'users' }"
         :aria-selected="activeTab === 'users'" @click="activeTab = 'users'">用户管理</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'maintenance' }"
+        :aria-selected="activeTab === 'maintenance'" @click="activeTab = 'maintenance'">维护模式</button>
     </div>
 
     <section v-show="activeTab === 'tags'" class="card bg-base-100 shadow-sm">
@@ -300,6 +303,8 @@ onMounted(() => {
     </section>
 
     <AdminUsersPanel v-if="activeTab === 'users'" />
+
+    <AdminMaintenancePanel v-if="activeTab === 'maintenance'" />
 
     <!-- 编辑标签弹窗 -->
     <dialog ref="editDialog" class="modal" @cancel="onEditCancel" @close="onEditClosed">

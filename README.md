@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.4.3
+v0.5.1
 
 Go语言制作的极简论坛
 
@@ -63,6 +63,17 @@ docker run -d --name go-messager -p 8080:8080 \
   ghcr.io/<owner>/go-messager:latest
 ```
 
+## 维护模式
+
+管理员可在「管理 → 维护模式」开启站点维护：
+
+- 可自定义标题和正文（正文可选）：没有正文时，维护页只显示居中放大的标题。
+- 开启后普通用户无法登录、注册，也无法访问任何接口（统一返回 `503` + `MAINTENANCE`）；管理员不受影响。
+- 管理员在管理页关闭后立即恢复；停留在维护页的用户每 15 秒自动检测，恢复后跳回首页。
+- 状态保存在数据库 `settings` 表（key 为 `maintenance`），重启后保留。
+
+维护期间仍可访问的接口：`GET /api/status`（维护页和前端守卫读取状态）、`GET /api/uptime`（容器健康检查）、`POST /api/authorize`（管理员登录以恢复站点）、`POST /api/register`（仅当数据库还没有用户时用于初始化管理员，其余情况返回 503）。
+
 ## 镜像构建
 
 CI 在推送 `vX.Y.Z` 标签时构建并推送镜像，发布版本标签（如 `0.5.0`）和 `latest`；在 Actions 页面手动触发时只推送 `latest`（见 `.gitea/workflows/Build-Docker.yml`）。本地构建：
@@ -112,6 +123,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 14. [x] 隐私模式和公开模式
 15. [x] 最小配置/docker配置
 16. [x] 等级系统 lkhsss/go-messager#1
+17. [ ] 用户管理界面显示等级和经验条
 
 # FIXME
 

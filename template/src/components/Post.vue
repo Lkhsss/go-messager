@@ -63,15 +63,16 @@ const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
       </header>
 
       <div class="space-y-1">
-        <h2 class="card-title break-words text-lg">
-          <router-link v-if="!detail" :to="`/post/${postId}`" class="hover:underline">{{ renderedTitle }}</router-link>
-          <span v-else>{{ renderedTitle }}</span>
+        <h2 class="card-title min-w-0 text-lg">
+          <router-link v-if="!detail" :to="`/post/${postId}`"
+            class="min-w-0 break-words hover:underline">{{ renderedTitle }}</router-link>
+          <span v-else class="min-w-0 break-words">{{ renderedTitle }}</span>
         </h2>
-        <p v-if="subtitle" class="break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
+        <p v-if="subtitle" class="min-w-0 break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
       </div>
 
       <MarkdownContent v-if="detail" :source="body ?? ''" class="text-sm text-base-content/80" />
-      <p v-else-if="excerpt" class="whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
+      <p v-else-if="excerpt" class="min-w-0 break-words whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
 
       <div v-if="!detail" class="flex justify-end">
         <router-link :to="`/post/${postId}`" class="btn btn-ghost btn-sm px-2 text-primary">

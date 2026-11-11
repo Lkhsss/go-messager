@@ -39,6 +39,9 @@ http.interceptors.request.use((config) => {
 
 const NETWORK_ERROR_CODE = "NETWORK_ERROR";
 
+// 维护模式拦截时派发的事件，由 main.ts 监听后切到维护页。
+export const MAINTENANCE_EVENT = "go-messager:maintenance";
+
 // 这些错误码需要清登录态。密码错误的 401 不在此列。
 const AUTH_ERROR_CODES = new Set([
   "UNAUTHORIZED",
@@ -66,6 +69,11 @@ http.interceptors.response.use(
       ) {
         clearAuth();
         window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      }
+
+      // 维护模式：通知应用切到维护页，不清登录态，恢复后可继续使用。
+      if (error.response?.status === 503 && payload?.error?.code === "MAINTENANCE") {
+        window.dispatchEvent(new Event(MAINTENANCE_EVENT));
       }
 
       if (payload?.error) {

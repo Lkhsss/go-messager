@@ -18,6 +18,9 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 
 	g := r.Group("/api")
 
+	// 维护模式下只放行白名单（状态、运行时长、登录）和管理员。
+	g.Use(data.MaintenanceGuard())
+
 	// 公开
 	g.GET("/status", data.Status)    // 是否已初始化（有没有第一个用户）
 	g.GET("/avatar", data.GetAvatar) // 公开：<img> 无法携带 Bearer
@@ -57,6 +60,8 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) error {
 	admin.PATCH("/admin/users/:id/status", data.SetAdminUserStatus)
 	admin.PUT("/admin/users/:id/password", data.SetAdminUserPassword)
 	admin.DELETE("/admin/users/:id", data.DeleteAdminUser)
+	admin.GET("/admin/maintenance", data.GetMaintenance)
+	admin.PUT("/admin/maintenance", data.UpdateMaintenance)
 
 	authed.GET("/me/posts", data.GetMyPosts)
 	authed.PUT("/post/:id", data.UpdatePost)

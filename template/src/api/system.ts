@@ -3,12 +3,21 @@ import http, { type ApiResponse } from "./http";
 // 站点访问模式。
 export type AccessMode = "private" | "public";
 
+// 维护模式状态。
+export interface MaintenanceInfo {
+  enabled: boolean;
+  title: string;
+  body: string;
+}
+
 // 系统状态。
 export interface SystemStatus {
   // 没有用户时为 false，需要初始化。
   initialized: boolean;
   // private：所有页面必须登录；public：游客可浏览文章。
   mode: AccessMode;
+  // 维护模式，旧版后端不返回。
+  maintenance?: MaintenanceInfo;
 }
 
 export async function getStatus(): Promise<SystemStatus> {

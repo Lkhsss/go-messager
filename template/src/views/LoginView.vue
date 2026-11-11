@@ -84,6 +84,10 @@ async function onSubmit() {
           <p class="mt-1 text-sm text-base-content/60">{{ title }}</p>
         </div>
 
+        <div v-if="system.isMaintenance" role="status" class="alert alert-warning alert-soft py-2 text-sm">
+          <span>站点维护中，仅管理员可登录</span>
+        </div>
+
         <div role="tablist" class="tabs tabs-box w-full">
           <button type="button" role="tab" class="tab flex-1" :class="{ 'tab-active': !isRegister }"
             @click="switchMode('login')">登录</button>
