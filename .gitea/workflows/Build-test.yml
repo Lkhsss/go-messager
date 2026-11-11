@@ -13,18 +13,18 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v7
 
-      # - name: 配置 registry 镜像
-      #   shell: bash
-      #   run: |
-      #     set -euo pipefail
-      #     REGISTRY="https://registry.npmmirror.com"
-      #     touch .npmrc
-      #     # 删除已有的 registry 行（兼容缩进和尾部空白）
-      #     sed -i.bak '/^[[:space:]]*registry[[:space:]]*=/d' .npmrc && rm -f .npmrc.bak
-      #     # 追加新的 registry 配置
-      #     echo "registry=${REGISTRY}" >> .npmrc
-      #     echo "----- .npmrc -----"
-      #     cat .npmrc
+      - name: 配置 registry 镜像
+        shell: bash
+        run: |
+          set -euo pipefail
+          REGISTRY="https://registry.npmmirror.com"
+          touch .npmrc
+          # 删除已有的 registry 行（兼容缩进和尾部空白）
+          sed -i.bak '/^[[:space:]]*registry[[:space:]]*=/d' .npmrc && rm -f .npmrc.bak
+          # 追加新的 registry 配置
+          echo "registry=${REGISTRY}" >> .npmrc
+          echo "----- .npmrc -----"
+          cat .npmrc
 
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
