@@ -31,9 +31,11 @@ jobs:
         env:
           COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
           COREPACK_HOME: ${{ runner.temp }}/corepack-cache
+          npm_config_registry: https://registry.npmmirror.com
         with:
           version: 11
           runtime: node@24
           working-directory: template
+          cache: false
           cache-dependency-path: template/pnpm-lock.yaml
           install: false
