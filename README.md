@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.4.1
+v0.4.2
 
 Go语言制作的极简论坛
 
@@ -65,7 +65,7 @@ docker run -d --name go-messager -p 8080:8080 \
 
 ## 镜像构建
 
-CI 在推送 `vX.Y.Z` 标签时构建并推送镜像（见 `.gitea/workflows/Build-Docker.yml`）。本地构建：
+CI 在推送 `vX.Y.Z` 标签时构建并推送镜像，发布版本标签（如 `0.5.0`）和 `latest`；在 Actions 页面手动触发时只推送 `latest`（见 `.gitea/workflows/Build-Docker.yml`）。本地构建：
 
 ```bash
 docker build -t go-messager:local .
@@ -73,22 +73,7 @@ docker build -t go-messager:local .
 
 Dockerfile 没有使用 `# syntax=docker/dockerfile:1`，避免构建开始前还要从 docker.io 拉取 dockerfile frontend；自带 frontend（Docker 20.10+ / BuildKit 0.8+）已支持 `RUN --mount=type=cache`。
 
-CI 不创建独立的 BuildKit 容器，也不使用 QEMU：直接调用 runner 上 Docker 引擎自带的 builder（`docker` driver），**只构建 runner 本机架构**（amd64 runner 产出 amd64 镜像）。链路更短，也不会再遇到自建 builder 里旧版 BuildKit 的会话/推送问题。
-
-基础镜像仍走镜像加速，workflow 会：
-
-1. 依次探测 `DOCKER_MIRRORS` 里的镜像站（`curl https://<mirror>/v2/` 返回 200/401 视为可用）；
-2. 把可用镜像站拼进基础镜像地址（如 `docker.1ms.run/library/node:24-alpine`），docker.io 不可达时也能拉到。
-
-构建日志会打印每个镜像站的探测结果和最终使用的基础镜像名，便于排查。本地访问不了 docker.io 时，也可以手动指定基础镜像：
-
-```bash
-docker build \
-  --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine \
-  --build-arg GO_IMAGE=docker.1ms.run/library/golang:1.27-alpine \
-  --build-arg RUNTIME_IMAGE=docker.1ms.run/library/alpine:3.22 \
-  -t go-messager:local .
-```
+CI 直接调用 runner 上 Docker 引擎自带的 builder（`docker` driver），不使用 QEMU，**只构建 runner 本机架构**（amd64 runner 产出 amd64 镜像）。
 
 npm / pnpm 的依赖默认走 `https://registry.npmmirror.com`（Dockerfile 里的 `ARG NPM_REGISTRY`），需要官方源或私有源时：
 
@@ -98,17 +83,16 @@ docker build --build-arg NPM_REGISTRY=https://registry.npmjs.org -t go-messager:
 
 CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 
-| 变量                | 默认值                           | 说明                                                                                                                                                |
-| ------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DOCKER_MIRRORS`    | `docker.1ms.run`                 | docker.io 镜像加速地址，逗号分隔；按顺序探测，第一个可用的用于改写基础镜像地址                                                                      |
-| `NODE_IMAGE`        | 留空                             | 显式设置时原样使用；留空则自动拼成 `<mirror>/library/node:24-alpine`，无可用镜像站时用 `node:24-alpine`                                             |
-| `GO_IMAGE`          | 留空                             | 同上，默认为 `golang:1.27-alpine`                                                                                                                   |
-| `RUNTIME_IMAGE`     | 留空                             | 同上，默认为 `alpine:3.22`                                                                                                                          |
-| `NPM_REGISTRY`      | `https://registry.npmmirror.com` | npm / pnpm 依赖镜像源，同时用于 CI 安装依赖和镜像构建中的 pnpm 安装                                                                                 |
-| `DOCKER_CACHE_TYPE` | `registry`                       | Docker 层缓存后端：`registry`（缓存推到镜像仓库标签）、`gha`（走 Actions 缓存 API）或 `none`（只使用本地缓存）；driver 不支持导出时自动退回本地缓存 |
-| `DOCKER_CACHE_REF`  | `buildcache`                     | `registry` 模式下的缓存标签名（`<镜像>:buildcache`），`gha` 模式下的缓存作用域                                                                      |
+| 变量                | 默认值                           | 说明                             |
+| ------------------- | -------------------------------- | -------------------------------- |
+| `REGISTRY`          | `ghcr.io`                        | 镜像仓库地址                     |
+| `IMAGE_NAME`        | `ghcr.io/<owner>/<repo>`         | 完整镜像名                       |
+| `REGISTRY_USERNAME` | 当前触发用户                     | 登录镜像仓库的用户名             |
+| `GOPROXY`           | `https://goproxy.cn,direct`      | Go 模块代理，作为 build-arg 传入 |
+| `GOSUMDB`           | `sum.golang.google.cn`           | Go 校验库，作为 build-arg 传入   |
+| `NPM_REGISTRY`      | `https://registry.npmmirror.com` | npm / pnpm 依赖镜像源            |
 
-> 注意：`DOCKER_MIRRORS` 默认 `docker.1ms.run`，可覆盖成逗号分隔的多个地址；换机器部署时请改成自己环境里可用的地址（置空则不做探测、直接使用 docker.io）。
+登录镜像仓库的密码在 Secrets 配置 `REGISTRY_PASSWORD`（缺省回退 `GITEA_TOKEN` / `GITHUB_TOKEN`）。
 
 # TODO
 

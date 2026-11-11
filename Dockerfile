@@ -1,17 +1,11 @@
 # 不写 `# syntax=docker/dockerfile:1`，避免构建前额外拉取 dockerfile frontend。
 # 当前写法兼容 Docker 20.10 / BuildKit 0.8+。
 
-# 基础镜像和 npm 源可通过 build-arg 覆盖：
-#   --build-arg NODE_IMAGE=docker.1ms.run/library/node:24-alpine
-#   --build-arg GO_IMAGE=docker.1ms.run/library/golang:1.27-alpine
-#   --build-arg RUNTIME_IMAGE=docker.1ms.run/library/alpine:3.22
+# npm 源可通过 build-arg 覆盖：
 #   --build-arg NPM_REGISTRY=https://registry.npmjs.org
-ARG NODE_IMAGE=node:24-alpine
-ARG GO_IMAGE=golang:1.27-alpine
-ARG RUNTIME_IMAGE=alpine:3.22
 
 # 1. 前端构建
-FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 
 ARG PNPM_VERSION=11
 ARG NPM_REGISTRY=https://registry.npmmirror.com
@@ -34,7 +28,7 @@ COPY template/ ./
 RUN pnpm run build
 
 # 2. 后端构建
-FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS backend
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -60,7 +54,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags="-s -w" -o /out/go-messager .
 
 # 3. 运行镜像
-FROM ${RUNTIME_IMAGE} AS runtime
+FROM alpine:3.22 AS runtime
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S app \

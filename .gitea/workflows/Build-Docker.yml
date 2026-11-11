@@ -2,7 +2,7 @@ name: Build Docker
 
 run-name: 构建 Docker 镜像 · ${{ github.ref_name }}
 
-# 推送 vX.Y.Z 形式的标签时发布镜像；也可以在 Actions 页面手动触发
+# 推送 vX.Y.Z 形式的标签时发布版本标签和 latest；手动触发只发布 latest。
 on:
   push:
     tags:
@@ -24,134 +24,19 @@ env:
   REGISTRY: ${{ vars.REGISTRY || 'ghcr.io' }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME || format('ghcr.io/{0}', github.repository) }}
   REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME || github.actor }}
-  # 只构建 runner 本机架构，无需 QEMU。
-  # DOCKER_CACHE_TYPE：registry / gha / none，不支持导出时自动退回本地缓存。
-  DOCKER_CACHE_TYPE: ${{ vars.DOCKER_CACHE_TYPE || 'registry' }}
-  # registry 模式是缓存标签名，gha 模式是作用域。
-  DOCKER_CACHE_REF: ${{ vars.DOCKER_CACHE_REF || 'buildcache' }}
   # Go 代理和校验库。
   GOPROXY: ${{ vars.GOPROXY || 'https://goproxy.cn,direct' }}
   GOSUMDB: ${{ vars.GOSUMDB || 'sum.golang.google.cn' }}
   # 前端依赖镜像源。
   NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
-  # docker.io 镜像加速地址，逗号分隔，按顺序探测。
-  DOCKER_MIRRORS: ${{ vars.DOCKER_MIRRORS || 'docker.1ms.run' }}
-  # 基础镜像；留空时按镜像站自动拼装。
-  NODE_IMAGE: ${{ vars.NODE_IMAGE || '' }}
-  GO_IMAGE: ${{ vars.GO_IMAGE || '' }}
-  RUNTIME_IMAGE: ${{ vars.RUNTIME_IMAGE || '' }}
 
 jobs:
-  setup:
-    name: 测试与前端构建
-    runs-on: ubuntu-latest
-    steps:
-      - name: 拉取代码
-        uses: actions/checkout@v7
-
-      - name: 校验版本号
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          if [[ ! "${tag}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::标签 ${tag} 不是 vX.Y.Z 形式的语义化版本"
-            exit 1
-          fi
-
-      - name: 安装 Go 环境
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          # 缓存 GOMODCACHE + GOCACHE，key 使用 go.sum。
-          cache: true
-          cache-dependency-path: go.sum
-          # 仅影响 Go 工具链下载。
-          go-download-base-url: ${{ vars.GO_DOWNLOAD_BASE_URL || 'https://golang.google.cn/dl' }}
-
-      - name: 安装 pnpm 和 Node.js
-        uses: pnpm/setup@v3
-        env:
-          npm_config_registry: https://registry.npmmirror.com
-          pnpm_config_registry: https://registry.npmmirror.com
-        with:
-          registry: https://registry.npmmirror.com
-          version: 11
-          runtime: node@26
-          working-directory: template
-          cache-dependency-path: template/pnpm-lock.yaml
-          cache: true
-          install: false
-
-      - name: 显示缓存目录（便于确认缓存是否命中）
-        shell: bash
-        run: |
-          echo "NPM_REGISTRY=${NPM_REGISTRY}"
-          echo "GOMODCACHE=$(go env GOMODCACHE)"
-          echo "GOCACHE=$(go env GOCACHE)"
-          du -sh "$(go env GOMODCACHE)" "$(go env GOCACHE)" 2>/dev/null || true
-          store="$(cd template && pnpm store path)"
-          echo "PNPM_STORE=${store}"
-          du -sh "${store}" 2>/dev/null || true
-
-      - name: 安装前端依赖
-        working-directory: template
-        env:
-          npm_config_registry: ${{ env.NPM_REGISTRY }}
-          pnpm_config_registry: ${{ env.NPM_REGISTRY }}
-        # 缓存命中时不联网校验。
-        run: pnpm install --frozen-lockfile --prefer-offline --registry "${NPM_REGISTRY}"
-
-      - name: 构建前端（含类型检查）
-        working-directory: template
-        run: pnpm run build
-
-      - name: 运行 Go 测试
-        run: go test ./...
-
   docker:
     name: 构建并推送镜像
     runs-on: ubuntu-latest
-    needs: setup
     steps:
       - name: 拉取代码
         uses: actions/checkout@v7
-
-      - name: 探测 docker.io 镜像加速
-        id: mirror
-        shell: bash
-        run: |
-          set -euo pipefail
-          prefix=""
-          if [[ -n "${DOCKER_MIRRORS:-}" ]]; then
-            IFS=',' read -ra list <<< "${DOCKER_MIRRORS}"
-            for mirror in "${list[@]}"; do
-              mirror="$(printf '%s' "${mirror}" | tr -d '[:space:]')"
-              if [[ -z "${mirror}" ]]; then
-                continue
-              fi
-              code="$(curl -sS -m 5 -o /dev/null -w '%{http_code}' "https://${mirror}/v2/" || true)"
-              echo "镜像站 ${mirror}/v2/ -> HTTP ${code:-连接失败}"
-              if [[ "${code}" == "200" || "${code}" == "401" ]]; then
-                prefix="${mirror}/library/"
-                break
-              fi
-            done
-          fi
-
-          node_image="${NODE_IMAGE:-${prefix}node:24-alpine}"
-          go_image="${GO_IMAGE:-${prefix}golang:1.27-alpine}"
-          runtime_image="${RUNTIME_IMAGE:-${prefix}alpine:3.22}"
-          {
-            echo "node_image=${node_image}"
-            echo "go_image=${go_image}"
-            echo "runtime_image=${runtime_image}"
-          } >> "${GITHUB_OUTPUT}"
-
-          echo "构建使用的基础镜像（按 runner 本机架构构建）："
-          echo "  NODE_IMAGE=${node_image}"
-          echo "  GO_IMAGE=${go_image}"
-          echo "  RUNTIME_IMAGE=${runtime_image}"
 
       - name: 登录镜像仓库
         uses: docker/login-action@v4
@@ -160,57 +45,22 @@ jobs:
           username: ${{ env.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITEA_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: 生成镜像标签与元数据
+      - name: 生成镜像标签
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }}
+          # 标签触发：推送版本标签（如 0.5.0）和 latest；手动触发：只推送 latest。
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
-            type=sha,format=short,prefix=sha-,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
-          labels: |
-            org.opencontainers.image.title=go-messager
-            org.opencontainers.image.description=Go 语言论坛
-            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
-
-      - name: 计算构建缓存配置
-        id: cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          from=""
-          to=""
-          # registry 可跨机器复用；gha 需要 runner 提供缓存服务；none 只用本地。
-          if [[ "${DOCKER_CACHE_TYPE}" == "none" ]]; then
-            echo "DOCKER_CACHE_TYPE=none：跳过构建缓存导出，仅使用 runner 本地缓存"
-          elif [[ "${DOCKER_CACHE_TYPE}" == "gha" ]]; then
-            from="type=gha,scope=${DOCKER_CACHE_REF}"
-            to="type=gha,scope=${DOCKER_CACHE_REF},mode=max"
-          else
-            # docker driver 需要 containerd 镜像存储才支持 cache 导出，
-            # 不支持时退回本地缓存。
-            if docker info --format '{{json .DriverStatus}}' 2>/dev/null | grep -q 'io.containerd.snapshotter.v1'; then
-              ref="${IMAGE_NAME}:${DOCKER_CACHE_REF}"
-              from="type=registry,ref=${ref}"
-              to="type=registry,ref=${ref},mode=max"
-            else
-              echo "::warning::Docker 引擎未启用 containerd 镜像存储（docker info 中没有 driver-type: io.containerd.snapshotter.v1），docker driver 不支持导出构建缓存；本次构建退回 runner 本地缓存。"
-            fi
-          fi
-          echo "from=${from}" >> "${GITHUB_OUTPUT}"
-          echo "to=${to}" >> "${GITHUB_OUTPUT}"
-          echo "cache-from: ${from:-<none>}"
-          echo "cache-to: ${to:-<none>}"
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest
 
       - name: 构建并推送
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          # 不指定 platforms，构建本机架构。
+          # 不指定 platforms，构建 runner 本机架构。
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -218,10 +68,3 @@ jobs:
             GOPROXY=${{ env.GOPROXY }}
             GOSUMDB=${{ env.GOSUMDB }}
             NPM_REGISTRY=${{ env.NPM_REGISTRY }}
-            NODE_IMAGE=${{ steps.mirror.outputs.node_image }}
-            GO_IMAGE=${{ steps.mirror.outputs.go_image }}
-            RUNTIME_IMAGE=${{ steps.mirror.outputs.runtime_image }}
-          pull: true
-          # mode=max 同时导出中间层，耗时步骤下次可直接命中。
-          cache-from: ${{ steps.cache.outputs.from }}
-          cache-to: ${{ steps.cache.outputs.to }}
