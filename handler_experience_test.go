@@ -184,3 +184,53 @@ func TestExperienceRequiresLogin(t *testing.T) {
 		t.Fatalf("未登录访问经验面板应 401，实际 %d：%s", code, describe(resp))
 	}
 }
+
+func TestMeAwardsDailyLoginAcrossDays(t *testing.T) {
+	env := newTestEnv(t)
+
+	// 注册即登录，当天已发放登录经验。
+	auth := env.register(t, "carol", "carol12345")
+
+	var user User
+	if err := env.db.Where("name = ?", "carol").Take(&user).Error; err != nil {
+		t.Fatalf("查询用户失败：%v", err)
+	}
+
+	// 模拟跨天：把当天进度挪到昨天，等价于今天还没有任何进度记录。
+	today := dailyTaskDate(time.Now())
+	if err := env.db.Model(&DailyTaskProgress{}).
+		Where("user_id = ? AND date = ?", user.ID, today).
+		Update("date", dailyTaskDate(time.Now().AddDate(0, 0, -1))).Error; err != nil {
+		t.Fatalf("模拟跨天失败：%v", err)
+	}
+
+	// 保持登录的第二天打开站点：/api/me 自动补发登录经验。
+	if me := env.fetchMe(t, auth.Token); me.Exp != 2*DailyLoginXP {
+		t.Fatalf("跨天访问应补发登录经验，实际 exp=%d", me.Exp)
+	}
+
+	// 同一天再次访问不重复发放。
+	if again := env.fetchMe(t, auth.Token); again.Exp != 2*DailyLoginXP {
+		t.Fatalf("同一天再次访问不应重复发放，实际 exp=%d", again.Exp)
+	}
+
+	// 任务面板同步显示当日登录已完成。
+	code, resp := env.do(t, http.MethodGet, "/api/me/experience", auth.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("经验面板应 200，实际 %d：%s", code, describe(resp))
+	}
+
+	found := false
+	for _, task := range decode[ExperienceStatus](t, resp).Tasks {
+		if task.Key != DailyTaskLogin {
+			continue
+		}
+		found = true
+		if !task.Completed || task.Progress != task.Target {
+			t.Fatalf("每日登录任务应已完成，实际 %+v", task)
+		}
+	}
+	if !found {
+		t.Fatalf("任务面板缺少每日登录任务")
+	}
+}

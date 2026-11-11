@@ -9,6 +9,10 @@
 - Dockerfile 移除基础镜像 ARG（`NODE_IMAGE` / `GO_IMAGE` / `RUNTIME_IMAGE`），直接使用官方基础镜像
 - README 精简「镜像构建」章节与 CI 变量说明
 
+### 修复
+
+- 跨天保持登录（token 未过期）时，访问 `GET /api/me` 自动补发当日登录经验，不再需要重新登录
+
 ## v0.3.0 2026-11-09
 
 ### 新增

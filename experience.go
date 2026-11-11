@@ -83,6 +83,23 @@ func dailyTaskLabel(task DailyTaskKey) string {
 	}
 }
 
+// dailyLoginPending 当天是否还没领取登录经验。已完成时只有一次查询，
+// 避免 /api/me 这类每次冷启动都会调用的接口反复开写事务。
+func (d *Data) dailyLoginPending(userID uint, date string) (bool, error) {
+	var progress DailyTaskProgress
+	err := d.DB.Select("id", "login_done").
+		Where("user_id = ? AND date = ?", userID, date).
+		Take(&progress).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return !progress.LoginDone, nil
+}
+
 // ensureDailyProgress 取当天进度，没有则创建；并发创建由唯一索引兜底。
 func ensureDailyProgress(tx *gorm.DB, userID uint, date string) (DailyTaskProgress, error) {
 	err := tx.Clauses(clause.OnConflict{DoNothing: true}).

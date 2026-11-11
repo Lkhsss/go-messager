@@ -135,12 +135,20 @@ func (d *Data) Register(c *gin.Context) {
 	Response{}.Ok(c, http.StatusCreated, result)
 }
 
-// Me 当前用户，前端用来校验本地 token。
+// Me 当前用户，前端用来校验本地 token；跨天保持登录时顺带补发每日登录经验。
 func (d *Data) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
 		Response{}.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "请先登录")
 		return
+	}
+
+	// 没退出、token 也没过期的情况下跨天访问，同样算每日登录；发放失败不影响响应。
+	now := time.Now()
+	if pending, err := d.dailyLoginPending(user.ID, dailyTaskDate(now)); err == nil && pending {
+		if gain, err := d.awardDailyTask(user.ID, DailyTaskLogin, DailyLoginXP, now); err == nil && gain != nil {
+			user.Exp = gain.Exp
+		}
 	}
 
 	Response{}.Ok(c, http.StatusOK, user.View())
