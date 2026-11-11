@@ -29,6 +29,7 @@ jobs:
       - name: 安装 pnpm 和 Node.js
         uses: pnpm/setup@v3
         env:
+          COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
         with:
           version: 11
           runtime: node@24
