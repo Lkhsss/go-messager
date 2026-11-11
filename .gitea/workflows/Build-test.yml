@@ -13,13 +13,14 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v7
 
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
+      - name: 安装 pnpm 和 Node.js
+        uses: pnpm/setup@v3
+        env:
+          npm_config_registry: https://registry.npmmirror.com
+          pnpm_config_registry: https://registry.npmmirror.com
         with:
-          node-version: 26
-
-      - name: 配置 npm 镜像
-        run: echo "registry=https://registry.npmmirror.com" >> ~/.npmrc
-
-      - name: 全局安装 pnpm
-        run: npm install -g pnpm@11
+          runtime: node@26
+          working-directory: template
+          cache-dependency-path: template/pnpm-lock.yaml
+          cache: false
+          install: false
