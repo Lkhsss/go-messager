@@ -19,6 +19,7 @@ jobs:
           npm_config_registry: https://registry.npmmirror.com
           pnpm_config_registry: https://registry.npmmirror.com
         with:
+          version: 11
           runtime: node@26
           working-directory: template
           cache-dependency-path: template/pnpm-lock.yaml
