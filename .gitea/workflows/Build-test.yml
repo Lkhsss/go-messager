@@ -19,6 +19,7 @@ jobs:
           npm_config_registry: https://registry.npmmirror.com
           pnpm_config_registry: https://registry.npmmirror.com
         with:
+          registry: https://registry.npmmirror.com
           version: 11
           runtime: node@26
           working-directory: template
