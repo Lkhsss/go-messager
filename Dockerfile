@@ -4,7 +4,7 @@
 # npm 源可通过 build-arg 覆盖：
 #   --build-arg NPM_REGISTRY=https://registry.npmjs.org
 
-ARG REGISTRY=git.lkhssssss.cn
+ARG REGISTRY=git.lkhssssss.cn/lkhsss
 
 # 1. 前端构建
 FROM --platform=$BUILDPLATFORM ${REGISTRY}/node:26-alpine AS frontend
