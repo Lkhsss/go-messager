@@ -33,16 +33,16 @@ Copy-Item conf/app.min.ini conf/app.ini
 
 默认值：
 
-| 配置项          | 默认值           | 说明                                                                        |
-| --------------- | ---------------- | --------------------------------------------------------------------------- |
-| `server.host`   | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                              |
-| `server.port`   | `8080`           | HTTP 端口                                                                   |
-| `server.mode`   | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先           |
-| `access.mode`   | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
-| `database.path` | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
-| `jwt.secret`    | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
-| `jwt.ttl`       | `24h`            | `JWT_TTL` 环境变量优先                                                      |
-| `captcha.enabled` | `true`         | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                        |
+| 配置项            | 默认值           | 说明                                                                        |
+| ----------------- | ---------------- | --------------------------------------------------------------------------- |
+| `server.host`     | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                              |
+| `server.port`     | `8080`           | HTTP 端口                                                                   |
+| `server.mode`     | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先           |
+| `access.mode`     | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
+| `database.path`   | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
+| `jwt.secret`      | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
+| `jwt.ttl`         | `24h`            | `JWT_TTL` 环境变量优先                                                      |
+| `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
@@ -128,12 +128,12 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 9. [x] 管理员查看数据统计：折线统计图，标签饼图，登陆人数
 10. [x] md 短emoji
 11. [x] 404界面
-12. [ ] 公告和维护模式
+12. [x] 公告和维护模式
 13. [x] 配置读取逻辑优化
 14. [x] 隐私模式和公开模式
 15. [x] 最小配置/docker配置
 16. [x] 等级系统 lkhsss/go-messager#1
-17. [ ] 用户管理界面显示等级和经验条
+17. [x] 用户管理界面显示等级和经验条
 18. [x] 一键清除某个用户文章
 
 # FIXME
