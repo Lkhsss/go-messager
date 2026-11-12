@@ -4,8 +4,10 @@
 # npm 源可通过 build-arg 覆盖：
 #   --build-arg NPM_REGISTRY=https://registry.npmjs.org
 
+ARG REGISTRY=git.lkhssssss.cn
+
 # 1. 前端构建
-FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
+FROM --platform=$BUILDPLATFORM ${REGISTRY}/node:26-alpine AS frontend
 
 ARG PNPM_VERSION=11
 ARG NPM_REGISTRY=https://registry.npmmirror.com
@@ -28,7 +30,7 @@ COPY template/ ./
 RUN pnpm run build
 
 # 2. 后端构建
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend
+FROM --platform=$BUILDPLATFORM ${REGISTRY}/golang:1.27-alpine AS backend
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -54,7 +56,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags="-s -w" -o /out/go-messager .
 
 # 3. 运行镜像
-FROM alpine:3.22 AS runtime
+FROM ${REGISTRY}/alpine AS runtime
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S app \
