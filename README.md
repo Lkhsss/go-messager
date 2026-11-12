@@ -1,6 +1,6 @@
 # Go Messager
 
-v0.6.4
+v0.6.4 | [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 
 Go语言制作的极简论坛
 
@@ -135,6 +135,8 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 16. [x] 等级系统 lkhsss/go-messager#1
 17. [x] 用户管理界面显示等级和经验条
 18. [x] 一键清除某个用户文章
+19. [ ] 图片支持
+20. [ ] 定时扫描任务
 
 # FIXME
 
