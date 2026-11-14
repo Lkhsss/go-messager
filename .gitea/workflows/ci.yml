@@ -24,7 +24,7 @@ jobs:
           registry: https://registry.npmmirror.com
           # version: 11
           runtime: node@26
-          # working-directory: template
+          working-directory: template
           cache-dependency-path: template/pnpm-lock.yaml
           cache: false
           install: false
