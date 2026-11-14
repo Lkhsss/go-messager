@@ -19,7 +19,7 @@ jobs:
           pnpm_config_registry: https://registry.npmmirror.com
         with:
           registry: https://registry.npmmirror.com
-          version: 11
+          # version: 11
           runtime: node@26
           working-directory: template
           cache-dependency-path: template/pnpm-lock.yaml
@@ -58,6 +58,7 @@ jobs:
           go test -failfast
   report:
     name: 报告
-    run-on: ubuntu-latest
+    runs-on: ubuntu-latest
+    needs: frontend backend
     steps:
       - uses: actions/upload-artifact@v7
