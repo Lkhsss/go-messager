@@ -52,7 +52,7 @@ jobs:
           # Path to dependency files for caching
           cache-dependency-path: "go.sum"
           # Custom base URL for Go downloads (e.g., for mirrors)
-          go-download-base-url: "https://mirrors.aliyun.com/"
+          go-download-base-url: "https://mirrors.aliyun.com/golang/"
       - name: 测试
         run: |
           go test -failfast
