@@ -59,6 +59,6 @@ jobs:
   report:
     name: 报告
     runs-on: ubuntu-latest
-    needs: frontend backend
+    needs: [frontend, backend]
     steps:
       - uses: actions/upload-artifact@v7
