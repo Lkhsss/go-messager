@@ -30,13 +30,33 @@ jobs:
           install: false
       - run: pnpm install --frozen-lockfile # 确保使用锁文件中的精确版本
       - run: pnpm type-check # vue-tsc --noEmit
+      # 后端用 //go:embed template/dist 内嵌前端，需要真实产物；
+      # type-check 已在上一行单独执行，这里只跑 vite build，不重复类型检查。
+      - run: pnpm run build-only
+      - name: 上传前端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          # path 相对仓库根目录，不受 defaults.run.working-directory 影响
+          path: template/dist
+          # 产物缺失时直接失败，避免后端拿到空目录后 go:embed 报错
+          if-no-files-found: error
 
   backend:
     name: 后端测试
     runs-on: ubuntu-latest
+    # 需要等前端构建产物上传完成才能下载
+    needs: frontend
     steps:
       - name: 拉取代码
         uses: actions/checkout@v7
+      - name: 下载前端产物
+        uses: actions/download-artifact@v7
+        with:
+          name: frontend-dist
+          path: template/dist
+      - name: 校验前端产物
+        run: test -f template/dist/index.html
       - name: 安装go环境
         uses: actions/setup-go@v7
         with:
@@ -57,7 +77,6 @@ jobs:
           go env -w GO111MODULE=on
           go env -w GOPROXY="https://goproxy.cn,direct"
           go env -w GOSUMDB=sum.golang.google.cn
-      - run: mkdir template/dist
       - name: 测试
         run: |
           go test -failfast
