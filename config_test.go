@@ -43,6 +43,9 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if !cfg.Captcha.Enabled {
 		t.Fatal("人机验证默认应开启")
 	}
+	if !cfg.Register.Enabled {
+		t.Fatal("注册默认应开启")
+	}
 }
 
 func TestLoadConfigFromFile(t *testing.T) {
@@ -64,6 +67,9 @@ secret = test-secret
 ttl = 2h
 
 [captcha]
+enabled = false
+
+[register]
 enabled = false
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -89,6 +95,9 @@ enabled = false
 	}
 	if cfg.Captcha.Enabled {
 		t.Fatal("captcha.enabled = false 时人机验证应关闭")
+	}
+	if cfg.Register.Enabled {
+		t.Fatal("register.enabled = false 时注册应关闭")
 	}
 }
 
@@ -145,6 +154,7 @@ func TestLoadConfigInvalidValues(t *testing.T) {
 		{name: "mode 非法", body: "[server]\nmode = prod\n", want: "[server] mode"},
 		{name: "access mode 非法", body: "[access]\nmode = secret\n", want: "[access] mode"},
 		{name: "captcha enabled 非法", body: "[captcha]\nenabled = maybe\n", want: "[captcha] enabled"},
+		{name: "register enabled 非法", body: "[register]\nenabled = maybe\n", want: "[register] enabled"},
 	}
 
 	for _, tt := range tests {

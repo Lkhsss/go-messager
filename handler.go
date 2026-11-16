@@ -49,8 +49,9 @@ func (d *Data) Status(c *gin.Context) {
 	}
 
 	Response{}.Ok(c, http.StatusOK, gin.H{
-		"initialized": count > 0,
-		"mode":        mode,
-		"maintenance": d.MaintenanceState(),
+		"initialized":      count > 0,
+		"mode":             mode,
+		"maintenance":      d.MaintenanceState(),
+		"register_enabled": d.RegisterEnabled,
 	})
 }

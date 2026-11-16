@@ -17,6 +17,7 @@ type AdminUserListItem struct {
 	ID            uint       `json:"id"`
 	Name          string     `json:"name"`
 	Role          Role       `json:"role"`
+	Trusted       bool       `json:"trusted"`
 	AvatarVersion string     `json:"avatar_version,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
@@ -42,6 +43,10 @@ type adminUserStatusInput struct {
 
 type adminUserPasswordInput struct {
 	Password string `json:"password"`
+}
+
+type adminUserTrustInput struct {
+	Trusted bool `json:"trusted"`
 }
 
 // GetAdminUsers GET /api/admin/users
@@ -178,6 +183,49 @@ func (d *Data) SetAdminUserStatus(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, items[0])
 }
 
+// SetAdminUserTrust 标记/取消可信用户 PATCH /api/admin/users/:id/trusted
+// 管理员始终视为可信，不允许修改标记。
+func (d *Data) SetAdminUserTrust(c *gin.Context) {
+	id, ok := parseAdminUserID(c)
+	if !ok {
+		return
+	}
+
+	var req adminUserTrustInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		return
+	}
+
+	target := User{}
+	if err := d.DB.Take(&target, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if target.Role == RoleAdmin {
+		Response{}.Fail(c, http.StatusBadRequest, "CANNOT_MODIFY_ADMIN", "管理员始终可信，无需修改")
+		return
+	}
+
+	if err := d.DB.Model(&target).Update("trusted", req.Trusted).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+	target.Trusted = req.Trusted
+
+	items, err := d.adminUserItems([]User{target})
+	if err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	Response{}.Ok(c, http.StatusOK, items[0])
+}
+
 // SetAdminUserPassword 修改用户密码。
 func (d *Data) SetAdminUserPassword(c *gin.Context) {
 	id, ok := parseAdminUserID(c)
@@ -253,6 +301,102 @@ func (d *Data) DeleteAdminUser(c *gin.Context) {
 	}
 
 	Response{}.Ok(c, http.StatusOK, gin.H{"id": id})
+}
+
+// DeleteAdminUntrustedUsers 硬删除所有未可信的普通用户 DELETE /api/admin/users/untrusted
+// 连同其文章、评论、反应和每日任务进度一起删除，用户名可以再次注册。
+func (d *Data) DeleteAdminUntrustedUsers(c *gin.Context) {
+	posts := 0
+	comments := int64(0)
+	deleted := int64(0)
+
+	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		// 事务内取目标，避免统计期间新注册的用户漏掉内容清理。
+		var targets []struct {
+			ID   uint
+			Name string
+		}
+		if err := tx.Unscoped().Model(&User{}).
+			Select("id", "name").
+			Where("role <> ? AND trusted = ?", RoleAdmin, false).
+			Find(&targets).Error; err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			return nil
+		}
+
+		names := make([]string, 0, len(targets))
+		ids := make([]uint, 0, len(targets))
+		for _, target := range targets {
+			names = append(names, target.Name)
+			ids = append(ids, target.ID)
+		}
+
+		var articleIDs []uint
+		if err := tx.Unscoped().Model(&Post{}).
+			Where("user IN ? AND root_id IS NULL", names).
+			Pluck("id", &articleIDs).Error; err != nil {
+			return err
+		}
+		posts = len(articleIDs)
+
+		if len(articleIDs) > 0 {
+			// 文章下的评论与回复一起删除，避免留下访问不到的孤儿数据。
+			result := tx.Unscoped().Where("root_id IN ?", articleIDs).Delete(&Post{})
+			if result.Error != nil {
+				return result.Error
+			}
+			comments += result.RowsAffected
+
+			// 文章本身一并硬删除。
+			if err := tx.Unscoped().Where("id IN ?", articleIDs).Delete(&Post{}).Error; err != nil {
+				return err
+			}
+
+			if err := tx.Unscoped().Where("post_id IN ?", articleIDs).Delete(&Reaction{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// 这些用户在他人文章下的评论与回复。
+		result := tx.Unscoped().Where("user IN ? AND root_id IS NOT NULL", names).Delete(&Post{})
+		if result.Error != nil {
+			return result.Error
+		}
+		comments += result.RowsAffected
+
+		// 发出的反应与每日任务进度。
+		if err := tx.Unscoped().Where("user_id IN ?", ids).Delete(&Reaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id IN ?", ids).Delete(&DailyTaskProgress{}).Error; err != nil {
+			return err
+		}
+
+		result = tx.Unscoped().Where("role <> ? AND trusted = ?", RoleAdmin, false).Delete(&User{})
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected
+
+		// 文章删除后校准标签使用次数，反应删除后校准反应统计。
+		if err := syncTagUsageCounts(tx); err != nil {
+			return err
+		}
+
+		return syncReactionCounts(tx)
+	})
+	if err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "DELETE_FAILED", err.Error())
+		return
+	}
+
+	Response{}.Ok(c, http.StatusOK, gin.H{
+		"deleted":  deleted,
+		"posts":    posts,
+		"comments": comments,
+	})
 }
 
 // ClearAdminUserPosts 删除指定用户的全部文章及其下的评论 DELETE /api/admin/users/:id/posts
@@ -410,6 +554,7 @@ func (d *Data) adminUserItems(users []User) ([]AdminUserListItem, error) {
 			ID:            user.ID,
 			Name:          user.Name,
 			Role:          user.Role,
+			Trusted:       user.Trusted,
 			AvatarVersion: avatarVersion(user.Avatar),
 			CreatedAt:     user.CreatedAt,
 			LastLoginAt:   user.LastLoginAt,

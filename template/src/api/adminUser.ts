@@ -8,6 +8,7 @@ export interface AdminUserItem {
   id: number;
   name: string;
   role: AdminUserRole;
+  trusted: boolean;
   avatar_version?: string;
   created_at: string;
   last_login_at?: string | null;
@@ -85,6 +86,17 @@ export async function setAdminUserDisabled(id: number, disabled: boolean): Promi
   return data.data;
 }
 
+// 标记/取消可信用户。
+export async function setAdminUserTrusted(id: number, trusted: boolean): Promise<AdminUserItem> {
+  const { data } = await http.patch<ApiResponse<AdminUserItem>>(`/admin/users/${id}/trusted`, {
+    trusted,
+  });
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "更新可信状态失败" };
+  }
+  return data.data;
+}
+
 // 修改密码。
 export async function changeAdminUserPassword(id: number, password: string): Promise<void> {
   const { data } = await http.put<ApiResponse<{ id: number }>>(`/admin/users/${id}/password`, {
@@ -101,6 +113,24 @@ export async function deleteAdminUser(id: number): Promise<void> {
   if (!data.success) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "删除用户失败" };
   }
+}
+
+export interface DeleteUntrustedUsersResult {
+  // 删除的用户数。
+  deleted: number;
+  // 随之删除的文章数。
+  posts: number;
+  // 随之删除的评论与回复数。
+  comments: number;
+}
+
+// 硬删除所有未标记可信的普通用户及其内容。
+export async function deleteUntrustedUsers(): Promise<DeleteUntrustedUsersResult> {
+  const { data } = await http.delete<ApiResponse<DeleteUntrustedUsersResult>>("/admin/users/untrusted");
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "清理未可信用户失败" };
+  }
+  return data.data;
 }
 
 export interface ClearAdminUserPostsResult {

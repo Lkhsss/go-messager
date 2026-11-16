@@ -21,6 +21,8 @@ type User struct {
 	// Password 存 bcrypt hash，不序列化。
 	Password string `form:"password" json:"-" binding:"required"`
 	Role     Role   `gorm:"type:text;not null;default:'user'" json:"role"`
+	// Trusted 可信用户标记，为后续邮箱验证铺垫；目前只能由管理员手动修改。
+	Trusted bool `gorm:"not null;default:false" json:"-"`
 	// Avatar 头像 data URL，不序列化。
 	Avatar string `gorm:"type:text" json:"-"`
 	// 文章收到的反应总数，启动时按 reactions 校准。

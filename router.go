@@ -17,6 +17,7 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 	}
 
 	data.CaptchaEnabled = cfg.Captcha.Enabled
+	data.RegisterEnabled = cfg.Register.Enabled
 
 	g := r.Group("/api")
 
@@ -65,6 +66,8 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 	admin.PUT("/admin/users/:id/password", data.SetAdminUserPassword)
 	admin.DELETE("/admin/users/:id", data.DeleteAdminUser)
 	admin.DELETE("/admin/users/:id/posts", data.ClearAdminUserPosts)
+	admin.PATCH("/admin/users/:id/trusted", data.SetAdminUserTrust)
+	admin.DELETE("/admin/users/untrusted", data.DeleteAdminUntrustedUsers)
 	admin.GET("/admin/maintenance", data.GetMaintenance)
 	admin.PUT("/admin/maintenance", data.UpdateMaintenance)
 

@@ -38,6 +38,14 @@ func newTestEnv(t *testing.T) *testEnv {
 
 func newTestEnvWithAccessMode(t *testing.T, accessMode string) *testEnv {
 	t.Helper()
+	return newTestEnvWithConfig(t, func(cfg *Config) {
+		cfg.Access.Mode = accessMode
+	})
+}
+
+// newTestEnvWithConfig 在挂载路由前覆盖配置。
+func newTestEnvWithConfig(t *testing.T, mutate func(*Config)) *testEnv {
+	t.Helper()
 
 	gin.SetMode(gin.TestMode)
 
@@ -65,7 +73,9 @@ func newTestEnvWithAccessMode(t *testing.T, accessMode string) *testEnv {
 	r := gin.New()
 	cfg := DefaultConfig()
 	cfg.JWT.Secret = "test-secret"
-	cfg.Access.Mode = accessMode
+	if mutate != nil {
+		mutate(cfg)
+	}
 	data, err := api(r, db, cfg)
 	if err != nil {
 		t.Fatalf("挂载路由失败：%v", err)

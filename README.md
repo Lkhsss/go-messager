@@ -44,6 +44,7 @@ Copy-Item conf/app.min.ini conf/app.ini
 | `jwt.secret`      | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
 | `jwt.ttl`         | `24h`            | `JWT_TTL` 环境变量优先                                                      |
 | `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
+| `register.enabled` | `true`          | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                     |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
@@ -74,6 +75,8 @@ docker run -d --name go-messager -p 8080:8080 \
 - 防刷：同一道题最多 5 次错误机会；生成 30 次/分钟/IP、校验 20 次/分钟/IP，超出分别返回 `CAPTCHA_TOO_MANY_ATTEMPTS`、`CAPTCHA_RATE_LIMITED`。
 - 验证码和 ticket 保存在进程内存中，重启后前端重新验证即可；需要关闭时设置 `[captcha] enabled = false`。
 
+关闭注册：设置 `[register] enabled = false` 并重启后，除全库还没有用户时的首个管理员初始化外，`POST /api/register` 统一返回 `403` + `REGISTER_DISABLED`；登录页隐藏注册入口，`/verify` 直接跳回登录页，已有账号的登录和使用不受影响。
+
 ## 维护模式
 
 管理员可在「管理 → 维护模式」开启站点维护：
@@ -84,6 +87,15 @@ docker run -d --name go-messager -p 8080:8080 \
 - 状态保存在数据库 `settings` 表（key 为 `maintenance`），重启后保留。
 
 维护期间仍可访问的接口：`GET /api/status`（维护页和前端守卫读取状态）、`GET /api/uptime`（容器健康检查）、`GET /api/captcha` 与 `POST /api/captcha/verify`（注册页取题和校验）、`POST /api/authorize`（管理员登录以恢复站点）、`POST /api/register`（仅当数据库还没有用户时用于初始化管理员，其余情况返回 503）。
+
+## 可信用户
+
+「可信用户」标记为后续邮箱验证做准备：目前只能由管理员手动标记，未可信账号仍可正常登录、发文和评论。
+
+- 用户列表显示「可信 / 未可信」徽章；管理员账号始终视为可信，不需要也不能修改标记。
+- `PATCH /api/admin/users/:id/trusted`（body `{"trusted": true|false}`）标记或取消可信。
+- `DELETE /api/admin/users/untrusted` 清理所有未可信的普通用户：硬删除账号及其文章、评论与回复、点赞等反应和每日任务进度，并重新校准标签使用次数与反应统计；账号不可恢复，用户名可以再次注册，管理员账号不受影响。
+- 首个管理员注册时直接可信，其余新注册用户默认不可信。升级已有数据库后，历史账号同样显示为未可信，清理前请先把需要保留的账号标记为可信。
 
 ## 镜像构建
 
@@ -139,6 +151,7 @@ CI 中可通过仓库「Settings → Variables」覆盖以下变量：
 19. [ ] 图片支持
 20. [ ] 定时扫描任务
 21. [ ] 修改密码功能
+22. [x] 可信用户标记与清理未可信用户
 
 # FIXME
 

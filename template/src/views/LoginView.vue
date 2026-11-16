@@ -46,6 +46,10 @@ function syncCaptchaState() {
 
 function switchMode(next: Mode) {
   if (mode.value === next) return
+  if (next === 'register' && !system.registerEnabled) {
+    errorMsg.value = '站点已关闭注册'
+    return
+  }
   mode.value = next
   form.password = ''
   form.confirm = ''
@@ -80,13 +84,21 @@ function validate(): string {
 
 onMounted(() => {
   if (route.query.mode === 'register') {
-    mode.value = 'register'
+    if (system.registerEnabled) {
+      mode.value = 'register'
+    } else {
+      errorMsg.value = '站点已关闭注册'
+    }
   }
   syncCaptchaState()
 })
 
 async function onSubmit() {
   if (loading.value) return
+  if (isRegister.value && !system.registerEnabled) {
+    errorMsg.value = '站点已关闭注册'
+    return
+  }
   errorMsg.value = validate()
   if (errorMsg.value) return
 
@@ -151,8 +163,8 @@ async function onSubmit() {
         <div role="tablist" class="tabs tabs-box w-full">
           <button type="button" role="tab" class="tab flex-1" :class="{ 'tab-active': !isRegister }"
             @click="switchMode('login')">登录</button>
-          <button type="button" role="tab" class="tab flex-1" :class="{ 'tab-active': isRegister }"
-            @click="switchMode('register')">注册</button>
+          <button v-if="system.registerEnabled" type="button" role="tab" class="tab flex-1"
+            :class="{ 'tab-active': isRegister }" @click="switchMode('register')">注册</button>
         </div>
 
         <form class="flex flex-col gap-3" novalidate @submit.prevent="onSubmit">
@@ -203,11 +215,12 @@ async function onSubmit() {
           </button>
         </form>
 
-        <p class="text-center text-xs text-base-content/50">
+        <p v-if="system.registerEnabled" class="text-center text-xs text-base-content/50">
           {{ isRegister ? '已有账号？' : '还没有账号？' }}
           <button type="button" class="link link-primary"
             @click="switchMode(isRegister ? 'login' : 'register')">{{ isRegister ? '去登录' : '去注册' }}</button>
         </p>
+        <p v-else class="text-center text-xs text-base-content/50">站点已关闭注册，请联系管理员</p>
 
         <router-link v-if="system.isPublic" to="/" class="btn btn-ghost btn-sm w-full">先逛逛首页</router-link>
       </div>

@@ -7,9 +7,11 @@ import {
   changeAdminUserPassword,
   clearAdminUserPosts,
   deleteAdminUser,
+  deleteUntrustedUsers,
   fetchAdminUserDetail,
   fetchAdminUsers,
   setAdminUserDisabled,
+  setAdminUserTrusted,
   type AdminUserDetail,
   type AdminUserItem,
   type AdminUserRole,
@@ -38,7 +40,7 @@ const newPassword = ref('')
 const passwordSaving = ref(false)
 const passwordError = ref('')
 
-type ActionMode = 'disable' | 'enable' | 'delete' | 'clear-posts'
+type ActionMode = 'disable' | 'enable' | 'delete' | 'clear-posts' | 'trust' | 'untrust'
 
 const actionDialog = ref<HTMLDialogElement | null>(null)
 const actionTarget = ref<AdminUserItem | null>(null)
@@ -46,9 +48,15 @@ const actionMode = ref<ActionMode>('disable')
 const actionSaving = ref(false)
 const actionError = ref('')
 
+const purgeDialog = ref<HTMLDialogElement | null>(null)
+const purgeSaving = ref(false)
+const purgeError = ref('')
+
 const actionTitle = computed(() => {
   if (actionMode.value === 'delete') return '删除用户'
   if (actionMode.value === 'clear-posts') return '清空文章'
+  if (actionMode.value === 'trust') return '设为可信用户'
+  if (actionMode.value === 'untrust') return '取消可信'
   return actionMode.value === 'disable' ? '封禁用户' : '解封用户'
 })
 
@@ -226,6 +234,12 @@ async function confirmAction() {
     } else if (actionMode.value === 'clear-posts') {
       const result = await clearAdminUserPosts(target.id)
       successMsg.value = `已清空「${target.name}」的 ${result.deleted} 篇文章（含 ${result.comments} 条评论）`
+    } else if (actionMode.value === 'trust' || actionMode.value === 'untrust') {
+      const trusted = actionMode.value === 'trust'
+      await setAdminUserTrusted(target.id, trusted)
+      successMsg.value = trusted
+        ? `已将「${target.name}」标记为可信用户`
+        : `已取消「${target.name}」的可信标记`
     } else {
       const disabled = actionMode.value === 'disable'
       await setAdminUserDisabled(target.id, disabled)
@@ -249,6 +263,47 @@ async function confirmAction() {
   }
 }
 
+function openPurge() {
+  purgeError.value = ''
+  if (!purgeDialog.value?.open) {
+    purgeDialog.value?.showModal()
+  }
+}
+
+function closePurge() {
+  if (purgeSaving.value) return
+  purgeDialog.value?.close()
+}
+
+function onPurgeClosed() {
+  purgeError.value = ''
+}
+
+function onPurgeCancel(event: Event) {
+  if (purgeSaving.value) {
+    event.preventDefault()
+  }
+}
+
+async function confirmPurge() {
+  if (purgeSaving.value) return
+
+  purgeSaving.value = true
+  purgeError.value = ''
+  successMsg.value = ''
+  try {
+    const result = await deleteUntrustedUsers()
+    successMsg.value = `已清理 ${result.deleted} 个未可信用户（${result.posts} 篇文章、${result.comments} 条评论）`
+    purgeSaving.value = false
+    purgeDialog.value?.close()
+    await loadUsers(1)
+  } catch (err) {
+    purgeError.value = isApiError(err) ? err.message : '清理未可信用户失败，请稍后再试'
+  } finally {
+    purgeSaving.value = false
+  }
+}
+
 onMounted(() => {
   void loadUsers()
 })
@@ -262,11 +317,16 @@ onMounted(() => {
           <h2 class="card-title text-lg">用户管理</h2>
           <p class="mt-1 text-sm text-base-content/60">共 {{ meta?.total ?? 0 }} 位用户</p>
         </div>
-        <form class="join" @submit.prevent="submitSearch">
-          <input v-model="keyword" type="search" placeholder="搜索用户名" aria-label="搜索用户名"
-            class="input input-bordered input-sm join-item w-40 sm:w-52" :disabled="loading" />
-          <button type="submit" class="btn btn-sm join-item" :disabled="loading">搜索</button>
-        </form>
+        <div class="flex flex-wrap items-center gap-2">
+          <form class="join" @submit.prevent="submitSearch">
+            <input v-model="keyword" type="search" placeholder="搜索用户名" aria-label="搜索用户名"
+              class="input input-bordered input-sm join-item w-40 sm:w-52" :disabled="loading" />
+            <button type="submit" class="btn btn-sm join-item" :disabled="loading">搜索</button>
+          </form>
+          <button type="button" class="btn btn-sm btn-warning" :disabled="loading || purgeSaving" @click="openPurge">
+            清理未可信用户
+          </button>
+        </div>
       </div>
 
       <div v-if="errorMsg" role="alert" class="alert alert-error alert-soft py-2 text-sm">
@@ -294,6 +354,10 @@ onMounted(() => {
               <div class="flex flex-wrap items-center gap-2">
                 <span class="truncate font-medium">{{ user.name }}</span>
                 <span class="badge badge-sm" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
+                <span v-if="user.role !== 'admin'" class="badge badge-sm"
+                  :class="user.trusted ? 'badge-success' : 'badge-ghost'">
+                  {{ user.trusted ? '可信' : '未可信' }}
+                </span>
               </div>
               <p class="mt-1 text-xs text-base-content/45">
                 上次活跃 {{ formatDate(user.last_active_at) }}
@@ -317,6 +381,11 @@ onMounted(() => {
 
             <div class="flex flex-wrap items-center justify-end gap-1">
               <button type="button" class="btn btn-ghost btn-xs" :disabled="loading" @click="openDetail(user)">详情</button>
+              <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs"
+                :disabled="loading || actionSaving"
+                @click="openAction(user, user.trusted ? 'untrust' : 'trust')">
+                {{ user.trusted ? '取消可信' : '设为可信' }}
+              </button>
               <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs"
                 :disabled="loading || actionSaving || passwordSaving"
                 @click="openAction(user, user.role === 'none' ? 'enable' : 'disable')">
@@ -426,6 +495,12 @@ onMounted(() => {
         <p v-else-if="actionMode === 'disable'" class="text-warning">
           封禁后该用户会立即无法登录，已登录的令牌也会失效。
         </p>
+        <p v-else-if="actionMode === 'trust'" class="text-base-content/60">
+          标记为可信后，批量清理未可信用户时不会删除该账号。
+        </p>
+        <p v-else-if="actionMode === 'untrust'" class="text-warning">
+          取消可信后，该账号会在「清理未可信用户」时被永久删除。
+        </p>
         <p v-else class="text-base-content/60">解封后该用户可以重新登录。</p>
 
         <div v-if="actionError" role="alert" class="alert alert-error alert-soft py-2 text-sm">
@@ -436,7 +511,7 @@ onMounted(() => {
       <div class="modal-action">
         <button type="button" class="btn btn-ghost" :disabled="actionSaving" @click="closeAction">取消</button>
         <button type="button" class="btn"
-          :class="actionMode === 'delete' ? 'btn-error' : actionMode === 'disable' || actionMode === 'clear-posts' ? 'btn-warning' : 'btn-primary'"
+          :class="actionMode === 'delete' ? 'btn-error' : actionMode === 'disable' || actionMode === 'clear-posts' || actionMode === 'untrust' ? 'btn-warning' : 'btn-primary'"
           :disabled="actionSaving" @click="confirmAction">
           <span v-if="actionSaving" class="loading loading-spinner loading-sm"></span>
           确定
@@ -448,5 +523,33 @@ onMounted(() => {
     </form>
   </dialog>
 
+  <!-- 清理未可信用户 -->
+  <dialog ref="purgeDialog" class="modal" @cancel="onPurgeCancel" @close="onPurgeClosed">
+    <div class="modal-box">
+      <h3 class="text-lg font-semibold">清理未可信用户</h3>
+
+      <div class="mt-3 space-y-3 text-sm">
+        <p>将永久删除所有未标记可信的普通用户（管理员不受影响）。</p>
+        <p class="text-warning">
+          这些账号的文章、评论与回复、点赞等反应和每日任务进度会一起删除，账号无法恢复，用户名可以重新注册。
+        </p>
+
+        <div v-if="purgeError" role="alert" class="alert alert-error alert-soft py-2 text-sm">
+          <span>{{ purgeError }}</span>
+        </div>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" :disabled="purgeSaving" @click="closePurge">取消</button>
+        <button type="button" class="btn btn-error" :disabled="purgeSaving" @click="confirmPurge">
+          <span v-if="purgeSaving" class="loading loading-spinner loading-sm"></span>
+          确定清理
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': purgeSaving }">
+      <button>close</button>
+    </form>
+  </dialog>
 </template>
 

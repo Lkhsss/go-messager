@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { fetchCaptcha, verifyCaptcha } from '@/api/captcha'
 import { isApiError } from '@/api/http'
 import { saveCaptchaTicket } from '@/utils/captchaTicket'
+import { useSystemStore } from '@/stores/system'
 
 const route = useRoute()
 const router = useRouter()
+const system = useSystemStore()
 
 const challengeId = ref('')
 const image = ref('')
@@ -110,6 +112,11 @@ async function onSubmit() {
 }
 
 onMounted(() => {
+  // 注册已关闭时不再走人机验证流程。
+  if (!system.registerEnabled) {
+    void router.replace('/login')
+    return
+  }
   void loadCaptcha()
 })
 

@@ -38,6 +38,7 @@ type Config struct {
 	Database DatabaseConfig
 	JWT      JWTConfig
 	Captcha  CaptchaConfig
+	Register RegisterConfig
 }
 
 // ServerConfig HTTP 配置。
@@ -74,6 +75,12 @@ type CaptchaConfig struct {
 	Enabled bool
 }
 
+// RegisterConfig 注册开关配置。
+type RegisterConfig struct {
+	// 关闭后除首个管理员初始化外不再允许注册。
+	Enabled bool
+}
+
 // DefaultConfig 默认配置。
 func DefaultConfig() *Config {
 	return &Config{
@@ -91,6 +98,9 @@ func DefaultConfig() *Config {
 			TTL: defaultJWTTTL,
 		},
 		Captcha: CaptchaConfig{
+			Enabled: true,
+		},
+		Register: RegisterConfig{
 			Enabled: true,
 		},
 	}
@@ -163,6 +173,15 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, fmt.Errorf("配置项 [captcha] enabled 无效[%s]：可选 true、false", raw)
 		}
 		cfg.Captcha.Enabled = enabled
+	}
+
+	// 注册默认开启，只有显式配置为 false 才关闭。
+	if raw := strings.TrimSpace(f.Section("register").Key("enabled").String()); raw != "" {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("配置项 [register] enabled 无效[%s]：可选 true、false", raw)
+		}
+		cfg.Register.Enabled = enabled
 	}
 
 	return cfg, nil

@@ -114,6 +114,12 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
+	// 关闭注册后同样保留首个管理员初始化，其余账号一律拒绝。
+	if userCount > 0 && !d.RegisterEnabled {
+		Response{}.Fail(c, http.StatusForbidden, "REGISTER_DISABLED", "注册功能已关闭")
+		return
+	}
+
 	exists, err := d.IfUserExist(req.Name)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())

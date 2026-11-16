@@ -34,6 +34,9 @@ type Data struct {
 	// 注册人机验证开关，关闭时注册不再要求 ticket。
 	CaptchaEnabled bool
 
+	// 注册开关，关闭后仅允许首个管理员初始化。
+	RegisterEnabled bool
+
 	// 验证码与一次性 ticket 的内存存储。
 	captcha *CaptchaStore
 
@@ -232,7 +235,9 @@ func (d *Data) CreateUser(name string, hash string) (User, error) {
 
 		user = User{Name: name, Password: hash, Role: RoleUser}
 		if count == 0 {
+			// 首个用户既是管理员，也直接标记为可信；其余注册用户等待管理员或邮箱验证。
 			user.Role = RoleAdmin
+			user.Trusted = true
 		}
 
 		return tx.Create(&user).Error

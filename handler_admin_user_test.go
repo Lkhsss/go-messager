@@ -292,3 +292,148 @@ func TestAdminClearUserPosts(t *testing.T) {
 		t.Fatalf("清空管理员文章应 400，实际 %d：%s", code, describe(resp))
 	}
 }
+
+func TestAdminUserTrust(t *testing.T) {
+	env := newTestEnv(t)
+
+	admin := env.register(t, "admin", "admin123")
+	alice := env.register(t, "alice", "alice123")
+	bob := env.register(t, "bob", "bob12345")
+
+	// 首个管理员直接可信，其余注册用户默认不可信。
+	code, resp := env.do(t, http.MethodGet, "/api/admin/users?per_page=10", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("用户列表应 200，实际 %d：%s", code, describe(resp))
+	}
+	list := decode[[]AdminUserListItem](t, resp)
+	adminItem := findAdminUser(list, "admin")
+	if adminItem == nil || !adminItem.Trusted {
+		t.Fatalf("首个管理员应直接可信：%+v", adminItem)
+	}
+	aliceItem := findAdminUser(list, "alice")
+	bobItem := findAdminUser(list, "bob")
+	if aliceItem == nil || bobItem == nil {
+		t.Fatalf("用户列表缺少 alice 或 bob：%+v", list)
+	}
+	if aliceItem.Trusted || bobItem.Trusted {
+		t.Fatalf("新注册用户默认不可信：alice=%v bob=%v", aliceItem.Trusted, bobItem.Trusted)
+	}
+
+	// 普通用户无权操作。
+	code, resp = env.do(t, http.MethodPatch, "/api/admin/users/"+idString(aliceItem.ID)+"/trusted", alice.Token,
+		map[string]bool{"trusted": true})
+	if code != http.StatusForbidden {
+		t.Fatalf("普通用户标记可信应 403，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/untrusted", alice.Token, nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("普通用户清理未可信用户应 403，实际 %d：%s", code, describe(resp))
+	}
+
+	// 管理员始终可信，不需要修改标记。
+	code, resp = env.do(t, http.MethodPatch, "/api/admin/users/"+idString(adminItem.ID)+"/trusted", admin.Token,
+		map[string]bool{"trusted": false})
+	if code != http.StatusBadRequest {
+		t.Fatalf("修改管理员可信标记应 400，实际 %d：%s", code, describe(resp))
+	}
+
+	// 标记 / 取消 / 再标记。
+	for _, trusted := range []bool{true, false, true} {
+		code, resp = env.do(t, http.MethodPatch, "/api/admin/users/"+idString(aliceItem.ID)+"/trusted", admin.Token,
+			map[string]bool{"trusted": trusted})
+		if code != http.StatusOK {
+			t.Fatalf("标记可信=%v 应 200，实际 %d：%s", trusted, code, describe(resp))
+		}
+		if updated := decode[AdminUserListItem](t, resp); updated.Trusted != trusted {
+			t.Fatalf("标记可信=%v 后返回 trusted=%v", trusted, updated.Trusted)
+		}
+	}
+	var stored User
+	if err := env.db.Where("name = ?", "alice").Take(&stored).Error; err != nil {
+		t.Fatalf("查询 alice 失败：%v", err)
+	}
+	if !stored.Trusted {
+		t.Fatal("alice 的可信标记未写入数据库")
+	}
+
+	// bob 的内容准备：1 篇文章、文章下 1 条评论、alice 文章下 2 条评论，并给 alice 文章点赞。
+	bobPost := env.createPost(t, bob.Token, PostInput{Title: "bob article", Body: "body"})
+	alicePost := env.createPost(t, alice.Token, PostInput{Title: "alice article", Body: "body"})
+
+	code, resp = env.do(t, http.MethodPost, "/api/post/"+idString(bobPost.ID)+"/comments", bob.Token,
+		CommentInput{Body: "bob comment"})
+	if code != http.StatusCreated {
+		t.Fatalf("bob 评论应 201，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodPost, "/api/post/"+idString(alicePost.ID)+"/comments", bob.Token,
+		CommentInput{Body: "bob on alice"})
+	if code != http.StatusCreated {
+		t.Fatalf("bob 评论 alice 文章应 201，实际 %d：%s", code, describe(resp))
+	}
+	topComment := decode[Post](t, resp)
+	code, resp = env.do(t, http.MethodPost, "/api/post/"+idString(alicePost.ID)+"/comments", bob.Token,
+		CommentInput{Body: "bob reply", ParentID: &topComment.ID})
+	if code != http.StatusCreated {
+		t.Fatalf("bob 回复应 201，实际 %d：%s", code, describe(resp))
+	}
+	env.react(t, bob.Token, alicePost.ID, ReactionLike)
+
+	// 清理：只删 bob，管理员和可信的 alice 保留。
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/untrusted", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("清理未可信用户应 200，实际 %d：%s", code, describe(resp))
+	}
+	purged := decode[struct {
+		Deleted  int64 `json:"deleted"`
+		Posts    int   `json:"posts"`
+		Comments int64 `json:"comments"`
+	}](t, resp)
+	if purged.Deleted != 1 || purged.Posts != 1 || purged.Comments != 3 {
+		t.Fatalf("清理结果异常：%+v", purged)
+	}
+
+	// 再清理一次没有可删的用户。
+	code, resp = env.do(t, http.MethodDelete, "/api/admin/users/untrusted", admin.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("重复清理应 200，实际 %d：%s", code, describe(resp))
+	}
+	if again := decode[struct {
+		Deleted int64 `json:"deleted"`
+	}](t, resp); again.Deleted != 0 {
+		t.Fatalf("重复清理不应再删除用户，实际 %d", again.Deleted)
+	}
+
+	// bob 账号被硬删除，登录失败，但用户名可以重新注册。
+	var remaining int64
+	if err := env.db.Unscoped().Model(&User{}).Where("name = ?", "bob").Count(&remaining).Error; err != nil {
+		t.Fatalf("统计 bob 失败：%v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("bob 应被硬删除，仍剩 %d 条记录", remaining)
+	}
+	code, resp = env.do(t, http.MethodPost, "/api/authorize", "", Credentials{Name: "bob", Password: "bob12345"})
+	if code != http.StatusUnauthorized {
+		t.Fatalf("被删除用户登录应 401，实际 %d：%s", code, describe(resp))
+	}
+	env.register(t, "bob", "bob12345")
+
+	// bob 的文章与评论都不在了；alice 的文章保留，bob 的点赞也被清掉。
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(bobPost.ID), alice.Token, nil)
+	if code != http.StatusNotFound {
+		t.Fatalf("bob 文章应 404，实际 %d：%s", code, describe(resp))
+	}
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(alicePost.ID)+"/comments", alice.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("alice 文章评论应 200，实际 %d：%s", code, describe(resp))
+	}
+	if kept := decode[[]Post](t, resp); len(kept) != 0 {
+		t.Fatalf("bob 在 alice 文章下的评论应清空，实际 %d 条：%+v", len(kept), kept)
+	}
+	code, resp = env.do(t, http.MethodGet, "/api/post/"+idString(alicePost.ID), alice.Token, nil)
+	if code != http.StatusOK {
+		t.Fatalf("alice 文章应保留，实际 %d：%s", code, describe(resp))
+	}
+	if view := decode[Post](t, resp); view.Reactions.Like != 0 {
+		t.Fatalf("bob 的点赞应删除，实际 %d", view.Reactions.Like)
+	}
+}

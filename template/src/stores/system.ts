@@ -11,6 +11,8 @@ export const useSystemStore = defineStore("system", () => {
   // 默认 private，接口异常时保持最保守的行为。
   const mode = ref<AccessMode>("private");
   const maintenance = ref<MaintenanceInfo>({ ...DEFAULT_MAINTENANCE });
+  // 默认允许注册，接口异常或旧版后端时保持可用。
+  const registerEnabled = ref(true);
   const isPublic = computed(() => mode.value === "public");
   const isMaintenance = computed(() => maintenance.value.enabled);
   let inflight: Promise<boolean> | null = null;
@@ -20,6 +22,7 @@ export const useSystemStore = defineStore("system", () => {
     initialized.value = status.initialized;
     mode.value = status.mode === "public" ? "public" : "private";
     maintenance.value = { ...DEFAULT_MAINTENANCE, ...(status.maintenance ?? {}) };
+    registerEnabled.value = status.register_enabled !== false;
   }
 
   // 只请求一次，并发复用。
@@ -70,6 +73,7 @@ export const useSystemStore = defineStore("system", () => {
     initialized,
     mode,
     maintenance,
+    registerEnabled,
     isPublic,
     isMaintenance,
     ensureInitialized,

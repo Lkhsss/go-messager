@@ -18,6 +18,8 @@ export interface SystemStatus {
   mode: AccessMode;
   // 维护模式，旧版后端不返回。
   maintenance?: MaintenanceInfo;
+  // 是否允许注册，旧版后端不返回时按允许处理。
+  register_enabled?: boolean;
 }
 
 export async function getStatus(): Promise<SystemStatus> {
