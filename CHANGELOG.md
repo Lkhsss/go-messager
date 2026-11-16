@@ -12,6 +12,11 @@
   - 账号彻底删除，用户名可以再次注册；管理员账号不受影响
   - 升级说明：已有用户升级后默认也是「未可信」，批量清理前请先标记需要保留的账号
 - 新增注册开关 `[register] enabled`（默认 `true`）：关闭后除首个管理员初始化外不再允许注册，`POST /api/register` 返回 `403 REGISTER_DISABLED`，登录页隐藏注册入口，修改配置后需重启生效
+- 管理页新增「清理」标签页：统计并清理已删除文章、已删除评论、孤立评论/反应/标签关联/每日任务
+  - `GET /api/admin/cleanup` 返回各分类数量、估算占用与数据库真实大小/空闲页，前端用饼图展示各分类占比与空间占用
+  - `DELETE /api/admin/cleanup/:key` 与 `DELETE /api/admin/cleanup` 硬删除对应数据，并重新校准标签使用次数与反应统计
+  - `POST /api/admin/cleanup/vacuum` 执行 `VACUUM` 回收空闲页
+  - 修复「清理未可信用户」硬删除文章时遗留 `post_tags` 与评论反应的问题
 
 ## v0.6.1 2026-11-11
 

@@ -341,30 +341,41 @@ func (d *Data) DeleteAdminUntrustedUsers(c *gin.Context) {
 		}
 		posts = len(articleIDs)
 
-		if len(articleIDs) > 0 {
-			// 文章下的评论与回复一起删除，避免留下访问不到的孤儿数据。
-			result := tx.Unscoped().Where("root_id IN ?", articleIDs).Delete(&Post{})
+		// 文章下的评论与回复，以及这些用户在他人文章下的评论与回复。
+		var commentIDs []uint
+		if err := tx.Unscoped().Model(&Post{}).
+			Where("root_id IN ? OR (user IN ? AND root_id IS NOT NULL)", articleIDs, names).
+			Pluck("id", &commentIDs).Error; err != nil {
+			return err
+		}
+
+		if len(commentIDs) > 0 {
+			// 评论上的反应与标签关联一并清理，避免留下孤儿数据。
+			if err := tx.Unscoped().Where("post_id IN ?", commentIDs).Delete(&Reaction{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", commentIDs).Error; err != nil {
+				return err
+			}
+			result := tx.Unscoped().Where("id IN ?", commentIDs).Delete(&Post{})
 			if result.Error != nil {
 				return result.Error
 			}
 			comments += result.RowsAffected
+		}
 
-			// 文章本身一并硬删除。
-			if err := tx.Unscoped().Where("id IN ?", articleIDs).Delete(&Post{}).Error; err != nil {
-				return err
-			}
-
+		if len(articleIDs) > 0 {
+			// 文章本身连同反应与标签关联一起硬删除。
 			if err := tx.Unscoped().Where("post_id IN ?", articleIDs).Delete(&Reaction{}).Error; err != nil {
 				return err
 			}
+			if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", articleIDs).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Where("id IN ?", articleIDs).Delete(&Post{}).Error; err != nil {
+				return err
+			}
 		}
-
-		// 这些用户在他人文章下的评论与回复。
-		result := tx.Unscoped().Where("user IN ? AND root_id IS NOT NULL", names).Delete(&Post{})
-		if result.Error != nil {
-			return result.Error
-		}
-		comments += result.RowsAffected
 
 		// 发出的反应与每日任务进度。
 		if err := tx.Unscoped().Where("user_id IN ?", ids).Delete(&Reaction{}).Error; err != nil {
@@ -374,7 +385,7 @@ func (d *Data) DeleteAdminUntrustedUsers(c *gin.Context) {
 			return err
 		}
 
-		result = tx.Unscoped().Where("role <> ? AND trusted = ?", RoleAdmin, false).Delete(&User{})
+		result := tx.Unscoped().Where("role <> ? AND trusted = ?", RoleAdmin, false).Delete(&User{})
 		if result.Error != nil {
 			return result.Error
 		}

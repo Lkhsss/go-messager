@@ -1,4 +1,4 @@
-# Go Messager v0.7.0
+# Go Messager v0.8.0
 
 [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 [![CI TEST](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/ci.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=ci.yml)
@@ -96,6 +96,16 @@ docker run -d --name go-messager -p 8080:8080 \
 - `PATCH /api/admin/users/:id/trusted`（body `{"trusted": true|false}`）标记或取消可信。
 - `DELETE /api/admin/users/untrusted` 清理所有未可信的普通用户：硬删除账号及其文章、评论与回复、点赞等反应和每日任务进度，并重新校准标签使用次数与反应统计；账号不可恢复，用户名可以再次注册，管理员账号不受影响。
 - 首个管理员注册时直接可信，其余新注册用户默认不可信。升级已有数据库后，历史账号同样显示为未可信，清理前请先把需要保留的账号标记为可信。
+
+## 数据清理
+
+管理 → 清理标签页会统计并清理数据库里的残留数据，便于长期运行后回收空间。
+
+- 分类：已删除文章（含其下评论与回复）、已删除评论、孤立评论、孤立反应、孤立标签关联、孤立每日任务。
+- 每个分类显示可清理条目数和**估算**占用（文本内容字节 + 每行固定开销），页面用饼图展示各分类占比；数据库真实大小与空闲页来自 `PRAGMA page_size/page_count/freelist_count`。
+- 接口：`GET /api/admin/cleanup`（统计）、`DELETE /api/admin/cleanup/:key`（单类）、`DELETE /api/admin/cleanup`（全部）、`POST /api/admin/cleanup/vacuum`（压缩数据库）。
+- 清理为硬删除且不可恢复，完成后会自动重新校准标签使用次数与反应统计。
+- 「压缩数据库」执行 `VACUUM`，会重建数据库文件并回收空闲页，建议在低峰时段操作。
 
 ## 镜像构建
 

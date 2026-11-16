@@ -68,6 +68,10 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 	admin.DELETE("/admin/users/:id/posts", data.ClearAdminUserPosts)
 	admin.PATCH("/admin/users/:id/trusted", data.SetAdminUserTrust)
 	admin.DELETE("/admin/users/untrusted", data.DeleteAdminUntrustedUsers)
+	admin.GET("/admin/cleanup", data.GetAdminCleanup)
+	admin.DELETE("/admin/cleanup/:key", data.DeleteAdminCleanup)
+	admin.DELETE("/admin/cleanup", data.DeleteAllAdminCleanup)
+	admin.POST("/admin/cleanup/vacuum", data.VacuumAdminCleanup)
 	admin.GET("/admin/maintenance", data.GetMaintenance)
 	admin.PUT("/admin/maintenance", data.UpdateMaintenance)
 

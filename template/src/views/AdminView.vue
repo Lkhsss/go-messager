@@ -5,8 +5,9 @@ import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
 import AdminMaintenancePanel from '@/components/AdminMaintenancePanel.vue'
+import AdminCleanupPanel from '@/components/AdminCleanupPanel.vue'
 
-const activeTab = ref<'tags' | 'users' | 'maintenance'>('tags')
+const activeTab = ref<'tags' | 'users' | 'maintenance' | 'cleanup'>('tags')
 
 const tags = ref<TagItem[]>([])
 const name = ref('')
@@ -213,7 +214,7 @@ onMounted(() => {
 
 <template>
   <main class="mx-auto w-full p-4 sm:p-6 lg:p-8"
-    :class="activeTab === 'users' ? 'max-w-5xl' : 'max-w-3xl'">
+    :class="activeTab === 'users' || activeTab === 'cleanup' ? 'max-w-5xl' : 'max-w-3xl'">
     <div class="mb-4">
       <h1 class="text-2xl font-semibold lg:text-3xl">管理</h1>
     </div>
@@ -223,6 +224,8 @@ onMounted(() => {
         :aria-selected="activeTab === 'tags'" @click="activeTab = 'tags'">标签管理</button>
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'users' }"
         :aria-selected="activeTab === 'users'" @click="activeTab = 'users'">用户管理</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'cleanup' }"
+        :aria-selected="activeTab === 'cleanup'" @click="activeTab = 'cleanup'">清理</button>
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'maintenance' }"
         :aria-selected="activeTab === 'maintenance'" @click="activeTab = 'maintenance'">维护模式</button>
     </div>
@@ -303,6 +306,8 @@ onMounted(() => {
     </section>
 
     <AdminUsersPanel v-if="activeTab === 'users'" />
+
+    <AdminCleanupPanel v-if="activeTab === 'cleanup'" />
 
     <AdminMaintenancePanel v-if="activeTab === 'maintenance'" />
 
