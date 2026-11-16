@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,10 @@ type Data struct {
 	// 验证码与一次性 ticket 的内存存储。
 	captcha *CaptchaStore
 
+	// 登录限流：IP 每分钟次数与账号失败锁定。
+	loginIPLimiter   *rateLimiter
+	loginFailLimiter *rateLimiter
+
 	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
 
@@ -53,14 +58,67 @@ func (d *Data) IsPublic() bool {
 	return d.AccessMode == AccessModePublic
 }
 
-// openDatabase 打开 SQLite，错误里附带路径和排查提示。
+// 数据库连接默认参数。
+const (
+	// 写锁等待时间。
+	defaultDatabaseBusyTimeout = 5 * time.Second
+	// 连接池上限；SQLite 单写者，串行访问最稳。
+	defaultDatabaseMaxOpenConns = 1
+	// 允许的最大连接数。
+	maxDatabaseOpenConns = 16
+)
+
+// dbPoolOptions SQLite 连接参数。
+type dbPoolOptions struct {
+	busyTimeout  time.Duration
+	maxOpenConns int
+}
+
+// defaultDBPoolOptions 返回默认连接参数。
+func defaultDBPoolOptions() dbPoolOptions {
+	return dbPoolOptions{
+		busyTimeout:  defaultDatabaseBusyTimeout,
+		maxOpenConns: defaultDatabaseMaxOpenConns,
+	}
+}
+
+// openDatabase 使用默认连接参数打开 SQLite。
 func openDatabase(dbPath string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	return openDatabaseWithOptions(dbPath, defaultDBPoolOptions())
+}
+
+// openDatabaseWithOptions 打开 SQLite，并按参数配置 DSN 与连接池。
+func openDatabaseWithOptions(dbPath string, opts dbPoolOptions) (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(databaseDSN(dbPath, opts.busyTimeout)), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库[%s]失败：%w（请检查该文件及所在目录对运行用户是否可读写，以及磁盘剩余空间）", dbPath, err)
 	}
 
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("获取数据库连接池[%s]失败：%w", dbPath, err)
+	}
+	sqlDB.SetMaxOpenConns(opts.maxOpenConns)
+	sqlDB.SetMaxIdleConns(opts.maxOpenConns)
+	sqlDB.SetConnMaxLifetime(0)
+
 	return db, nil
+}
+
+// databaseDSN 拼接 WAL、busy_timeout、synchronous 与 immediate 事务参数。
+func databaseDSN(dbPath string, busyTimeout time.Duration) string {
+	timeoutMS := int(busyTimeout / time.Millisecond)
+	if timeoutMS < 1 {
+		timeoutMS = 1
+	}
+
+	query := url.Values{}
+	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", fmt.Sprintf("busy_timeout(%d)", timeoutMS))
+	query.Add("_pragma", "synchronous(NORMAL)")
+	query.Set("_txlock", "immediate")
+
+	return dbPath + "?" + query.Encode()
 }
 
 // checkDatabaseWritable 检查库文件和目录写权限。
@@ -97,7 +155,13 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 		return nil, err
 	}
 
-	d := &Data{DB: db, JWTTTL: ttl, captcha: NewCaptchaStore()}
+	d := &Data{
+		DB:               db,
+		JWTTTL:           ttl,
+		captcha:          NewCaptchaStore(),
+		loginIPLimiter:   newRateLimiter(loginIPWindow),
+		loginFailLimiter: newRateLimiter(loginFailureWindow),
+	}
 
 	secret, err := ensureJWTSecret(db, cfg.Secret)
 	if err != nil {

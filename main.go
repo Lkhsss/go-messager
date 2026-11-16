@@ -41,12 +41,20 @@ func main() {
 
 	r := gin.Default()
 
+	// 反向代理白名单；留空时不信任 X-Forwarded-For，避免伪造 IP 绕过限流。
+	if err := r.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		panic(fmt.Errorf("配置项 [server] trusted_proxies 无效：%w", err))
+	}
+
 	// 全局 gzip。
 	r.Use(gzipCompression())
 
 	log.Printf("数据库文件：%s", cfg.Database.Path)
 
-	db, err := openDatabase(cfg.Database.Path)
+	db, err := openDatabaseWithOptions(cfg.Database.Path, dbPoolOptions{
+		busyTimeout:  cfg.Database.BusyTimeout,
+		maxOpenConns: cfg.Database.MaxOpenConns,
+	})
 	if err != nil {
 		panic(err)
 	}

@@ -48,6 +48,8 @@ type ServerConfig struct {
 	Port int
 	// debug/release/test，留空默认 release；GIN_MODE 优先。
 	Mode string
+	// 反向代理地址或网段，逗号分隔；留空表示不信任 X-Forwarded-For。
+	TrustedProxies []string
 }
 
 // AccessConfig 站点访问控制。
@@ -61,6 +63,10 @@ type AccessConfig struct {
 type DatabaseConfig struct {
 	// SQLite 文件路径。
 	Path string
+	// 写锁等待时间，默认 5s。
+	BusyTimeout time.Duration
+	// 连接池上限，SQLite 建议 1，串行写可彻底避免 SQLITE_BUSY。
+	MaxOpenConns int
 }
 
 // JWTConfig JWT 配置。
@@ -92,7 +98,9 @@ func DefaultConfig() *Config {
 			Mode: defaultAccessMode,
 		},
 		Database: DatabaseConfig{
-			Path: filepath.Join("data", "data.db"),
+			Path:         filepath.Join("data", "data.db"),
+			BusyTimeout:  defaultDatabaseBusyTimeout,
+			MaxOpenConns: defaultDatabaseMaxOpenConns,
 		},
 		JWT: JWTConfig{
 			TTL: defaultJWTTTL,
@@ -144,6 +152,8 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("配置项 [server] mode 无效[%s]：可选 debug、release、test", mode)
 	}
 
+	cfg.Server.TrustedProxies = parseProxyList(f.Section("server").Key("trusted_proxies").String())
+
 	accessMode := strings.ToLower(strings.TrimSpace(f.Section("access").Key("mode").String()))
 	switch accessMode {
 	case "":
@@ -157,6 +167,21 @@ func LoadConfig(path string) (*Config, error) {
 	if dbPath := strings.TrimSpace(f.Section("database").Key("path").String()); dbPath != "" {
 		cfg.Database.Path = filepath.Clean(dbPath)
 	}
+
+	busyTimeout, err := readDuration(f, "database", "busy_timeout", cfg.Database.BusyTimeout)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Database.BusyTimeout = busyTimeout
+
+	maxOpenConns, err := readInt(f, "database", "max_open_conns", cfg.Database.MaxOpenConns)
+	if err != nil {
+		return nil, err
+	}
+	if maxOpenConns < 1 || maxOpenConns > maxDatabaseOpenConns {
+		return nil, fmt.Errorf("配置项 [database] max_open_conns 超出范围[%d]：需要在 1-%d 之间", maxOpenConns, maxDatabaseOpenConns)
+	}
+	cfg.Database.MaxOpenConns = maxOpenConns
 
 	cfg.JWT.Secret = strings.TrimSpace(f.Section("jwt").Key("secret").String())
 
@@ -213,6 +238,22 @@ func readDuration(f *ini.File, section, key string, def time.Duration) (time.Dur
 		return 0, fmt.Errorf("配置项 [%s] %s 无效[%s]：需要正的时间段，例如 24h、30m", section, key, raw)
 	}
 	return d, nil
+}
+
+// parseProxyList 解析逗号分隔的代理地址，忽略空项。
+func parseProxyList(raw string) []string {
+	parts := strings.Split(raw, ",")
+	list := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			list = append(list, value)
+		}
+	}
+	if len(list) == 0 {
+		return nil
+	}
+
+	return list
 }
 
 // ListenAddr 返回监听地址。

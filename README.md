@@ -1,4 +1,4 @@
-# Go Messager v0.8.0
+# Go Messager v0.9.0
 
 [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 [![CI TEST](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/ci.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=ci.yml)
@@ -45,6 +45,9 @@ Copy-Item conf/app.min.ini conf/app.ini
 | `jwt.ttl`         | `24h`            | `JWT_TTL` 环境变量优先                                                      |
 | `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
 | `register.enabled` | `true`          | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                     |
+| `server.trusted_proxies` | 空         | 逗号分隔的反向代理 IP/网段；留空不信任 `X-Forwarded-For`                  |
+| `database.busy_timeout` | `5s`        | SQLite 写锁等待时间                                                       |
+| `database.max_open_conns` | `1`       | 连接池上限；SQLite 建议 1，串行写避免 `database is locked`                |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
@@ -106,6 +109,24 @@ docker run -d --name go-messager -p 8080:8080 \
 - 接口：`GET /api/admin/cleanup`（统计）、`DELETE /api/admin/cleanup/:key`（单类）、`DELETE /api/admin/cleanup`（全部）、`POST /api/admin/cleanup/vacuum`（压缩数据库）。
 - 清理为硬删除且不可恢复，完成后会自动重新校准标签使用次数与反应统计。
 - 「压缩数据库」执行 `VACUUM`，会重建数据库文件并回收空闲页，建议在低峰时段操作。
+
+## SQLite 并发与登录限流
+
+站点运行在单文件 SQLite 上，默认已完成以下调优，避免被刷或并发访问时出现 `database is locked (5) (SQLITE_BUSY)`：
+
+- `journal_mode=WAL`：读写不互相阻塞
+- `busy_timeout=5s`：写锁等待时间，可通过 `[database] busy_timeout` 调整
+- `_txlock=immediate`：事务开始即取写锁，避免“先读后写”升级锁失败
+- 连接池上限默认 1（`[database] max_open_conns`）：数据库操作串行执行，彻底消除锁竞争；代价是大库统计/`VACUUM` 期间其他请求会短暂等待
+
+登录限流（进程内存，重启清零）：
+
+- 每 IP 20 次/分钟（成功与失败都计数），超出返回 `429 LOGIN_RATE_LIMITED` 与 `Retry-After`
+- 同一 IP + 用户名 15 分钟内 5 次失败后临时锁定，返回 `429 LOGIN_LOCKED`；登录成功清零
+- 反向代理部署必须配置 `[server] trusted_proxies`（例如 `127.0.0.1`），否则所有请求会被识别为同一个 IP；留空表示不信任 `X-Forwarded-For`
+- 多实例部署时内存限流不共享，建议在网关层（Nginx `limit_req`、Caddy `rate_limit`）或 fail2ban 再兜一层
+
+WAL 会产生 `data.db-wal`、`data.db-shm` 文件：备份请停服后拷贝整个 `data` 目录，或使用 `VACUUM INTO 'backup.db'`，不要只拷贝 `.db`。
 
 ## 镜像构建
 

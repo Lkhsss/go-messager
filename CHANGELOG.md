@@ -1,6 +1,6 @@
 # 更新日志
 
-## 未发布
+## v0.9.0
 
 ### 新增
 
@@ -12,6 +12,8 @@
   - 账号彻底删除，用户名可以再次注册；管理员账号不受影响
   - 升级说明：已有用户升级后默认也是「未可信」，批量清理前请先标记需要保留的账号
 - 新增注册开关 `[register] enabled`（默认 `true`）：关闭后除首个管理员初始化外不再允许注册，`POST /api/register` 返回 `403 REGISTER_DISABLED`，登录页隐藏注册入口，修改配置后需重启生效
+- SQLite 并发调优：默认开启 WAL、`busy_timeout=5s`、`_txlock=immediate`，连接池默认 1，缓解被刷或并发写导致的 `database is locked (5) (SQLITE_BUSY)`；新增 `[database] busy_timeout`、`[database] max_open_conns` 与 `[server] trusted_proxies` 配置
+- 登录限流：每 IP 20 次/分钟，同一 IP + 用户名 15 分钟内 5 次失败后临时锁定，返回 `429 LOGIN_RATE_LIMITED` / `LOGIN_LOCKED`，登录成功清零
 - 管理页新增「清理」标签页：统计并清理已删除文章、已删除评论、孤立评论/反应/标签关联/每日任务
   - `GET /api/admin/cleanup` 返回各分类数量、估算占用与数据库真实大小/空闲页，前端用饼图展示各分类占比与空间占用
   - `DELETE /api/admin/cleanup/:key` 与 `DELETE /api/admin/cleanup` 硬删除对应数据，并重新校准标签使用次数与反应统计

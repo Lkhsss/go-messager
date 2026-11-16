@@ -34,6 +34,15 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if cfg.Database.Path != filepath.Join("data", "data.db") {
 		t.Fatalf("数据库默认路径异常：%s", cfg.Database.Path)
 	}
+	if cfg.Database.BusyTimeout != defaultDatabaseBusyTimeout {
+		t.Fatalf("busy_timeout 默认值应为 %s，实际 %s", defaultDatabaseBusyTimeout, cfg.Database.BusyTimeout)
+	}
+	if cfg.Database.MaxOpenConns != defaultDatabaseMaxOpenConns {
+		t.Fatalf("max_open_conns 默认值应为 %d，实际 %d", defaultDatabaseMaxOpenConns, cfg.Database.MaxOpenConns)
+	}
+	if len(cfg.Server.TrustedProxies) != 0 {
+		t.Fatalf("trusted_proxies 默认应为空，实际 %+v", cfg.Server.TrustedProxies)
+	}
 	if cfg.JWT.Secret != "" {
 		t.Fatalf("JWT secret 默认值应为空，实际 %q", cfg.JWT.Secret)
 	}
@@ -55,12 +64,15 @@ func TestLoadConfigFromFile(t *testing.T) {
 host = 127.0.0.1
 port = 9090
 mode = release
+trusted_proxies = 127.0.0.1, 10.0.0.0/8
 
 [access]
 mode = public
 
 [database]
 path = ./tmp/app.db
+busy_timeout = 3s
+max_open_conns = 4
 
 [jwt]
 secret = test-secret
@@ -89,6 +101,12 @@ enabled = false
 	}
 	if cfg.Database.Path != filepath.Clean("./tmp/app.db") {
 		t.Fatalf("database.path 解析异常：%s", cfg.Database.Path)
+	}
+	if len(cfg.Server.TrustedProxies) != 2 || cfg.Server.TrustedProxies[0] != "127.0.0.1" || cfg.Server.TrustedProxies[1] != "10.0.0.0/8" {
+		t.Fatalf("trusted_proxies 解析异常：%+v", cfg.Server.TrustedProxies)
+	}
+	if cfg.Database.BusyTimeout != 3*time.Second || cfg.Database.MaxOpenConns != 4 {
+		t.Fatalf("database 连接配置解析异常：%+v", cfg.Database)
 	}
 	if cfg.JWT.Secret != "test-secret" || cfg.JWT.TTL != 2*time.Hour {
 		t.Fatalf("jwt 配置解析异常：%+v", cfg.JWT)
@@ -155,6 +173,9 @@ func TestLoadConfigInvalidValues(t *testing.T) {
 		{name: "access mode 非法", body: "[access]\nmode = secret\n", want: "[access] mode"},
 		{name: "captcha enabled 非法", body: "[captcha]\nenabled = maybe\n", want: "[captcha] enabled"},
 		{name: "register enabled 非法", body: "[register]\nenabled = maybe\n", want: "[register] enabled"},
+		{name: "busy_timeout 非法", body: "[database]\nbusy_timeout = abc\n", want: "[database] busy_timeout"},
+		{name: "max_open_conns 非整数", body: "[database]\nmax_open_conns = abc\n", want: "[database] max_open_conns"},
+		{name: "max_open_conns 越界", body: "[database]\nmax_open_conns = 99\n", want: "[database] max_open_conns"},
 	}
 
 	for _, tt := range tests {

@@ -3,12 +3,23 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+)
+
+// 登录限流参数。
+const (
+	// 每个 IP 每分钟的登录尝试上限（成功与失败都计数）。
+	loginIPPerMinute = 20
+	// 同一 IP + 用户名的失败次数上限与统计窗口。
+	loginFailureLimit  = 5
+	loginIPWindow      = time.Minute
+	loginFailureWindow = 15 * time.Minute
 )
 
 // AuthResult 登录/注册结果。
@@ -34,10 +45,25 @@ func (d *Data) Authorize(c *gin.Context) {
 		return
 	}
 
+	// 被爆破时先限流，避免产生无意义的数据库查询和 bcrypt 计算。
+	clientIP := c.ClientIP()
+	failKey := loginFailureKey(clientIP, req.Name)
+	if !d.loginIPLimiter.Allow(clientIP, loginIPPerMinute) {
+		c.Header("Retry-After", strconv.Itoa(int(loginIPWindow/time.Second)))
+		Response{}.Fail(c, http.StatusTooManyRequests, "LOGIN_RATE_LIMITED", "登录尝试过于频繁，请稍后再试")
+		return
+	}
+	if d.loginFailLimiter.Exceeded(failKey, loginFailureLimit) {
+		c.Header("Retry-After", strconv.Itoa(int(loginFailureWindow/time.Second)))
+		Response{}.Fail(c, http.StatusTooManyRequests, "LOGIN_LOCKED", "登录失败次数过多，请稍后再试")
+		return
+	}
+
 	user, err := d.GetUserByName(req.Name)
 	if err != nil {
 		// 不暴露账号是否存在。
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			d.loginFailLimiter.Allow(failKey, loginFailureLimit)
 			Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 			return
 		}
@@ -47,6 +73,7 @@ func (d *Data) Authorize(c *gin.Context) {
 
 	// 先校验密码再判断停用，避免用 403 探测用户。
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		d.loginFailLimiter.Allow(failKey, loginFailureLimit)
 		Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
@@ -61,6 +88,9 @@ func (d *Data) Authorize(c *gin.Context) {
 		Response{}.Fail(c, http.StatusServiceUnavailable, "MAINTENANCE", state.Title)
 		return
 	}
+
+	// 登录成功清零失败计数。
+	d.loginFailLimiter.Reset(failKey)
 
 	token, expiresAt, err := d.issueToken(user)
 	if err != nil {
@@ -183,4 +213,9 @@ func (d *Data) Me(c *gin.Context) {
 	}
 
 	Response{}.Ok(c, http.StatusOK, user.View())
+}
+
+// loginFailureKey 失败次数按 IP + 用户名（忽略大小写）隔离。
+func loginFailureKey(ip, name string) string {
+	return ip + "|" + strings.ToLower(name)
 }
