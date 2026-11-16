@@ -173,6 +173,10 @@ async function savePassword() {
     passwordError.value = '密码不能为空'
     return
   }
+  if (new TextEncoder().encode(newPassword.value).length < 8) {
+    passwordError.value = '密码至少 8 个字节'
+    return
+  }
   if (new TextEncoder().encode(newPassword.value).length > 72) {
     passwordError.value = '密码最多 72 字节'
     return

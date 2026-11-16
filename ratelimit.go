@@ -5,11 +5,19 @@ import (
 	"time"
 )
 
+// 限流器容量与清理间隔：攻击者用大量 IP/账号时不能让 map 无限增长，
+// 也不能每次请求都遍历整个 map。
+const (
+	rateLimiterMaxEntries    = 100000
+	rateLimiterSweepInterval = time.Second
+)
+
 // rateLimiter 固定窗口限流器，按 key 独立计数；过期窗口惰性清理。
 type rateLimiter struct {
-	mu      sync.Mutex
-	window  time.Duration
-	entries map[string]rateWindowState
+	mu        sync.Mutex
+	window    time.Duration
+	entries   map[string]rateWindowState
+	lastSweep time.Time
 }
 
 // newRateLimiter 创建限流器，窗口非法时回退 1 分钟。
@@ -84,10 +92,31 @@ func (l *rateLimiter) Reset(key string) {
 }
 
 // sweepLocked 清理过期窗口，避免长期运行内存只增不减。
+// 正常情况最多每秒遍历一次；达到容量上限时只淘汰一个条目，避免 CPU 被拖垮。
 func (l *rateLimiter) sweepLocked(now time.Time) {
+	if !l.lastSweep.IsZero() && now.Sub(l.lastSweep) < rateLimiterSweepInterval {
+		if len(l.entries) >= rateLimiterMaxEntries {
+			l.evictOneLocked()
+		}
+		return
+	}
+
 	for key, entry := range l.entries {
 		if now.Sub(entry.start) >= l.window {
 			delete(l.entries, key)
 		}
+	}
+	l.lastSweep = now
+
+	for len(l.entries) >= rateLimiterMaxEntries {
+		l.evictOneLocked()
+	}
+}
+
+// evictOneLocked 在容量打满时淘汰一个任意条目。
+func (l *rateLimiter) evictOneLocked() {
+	for key := range l.entries {
+		delete(l.entries, key)
+		return
 	}
 }

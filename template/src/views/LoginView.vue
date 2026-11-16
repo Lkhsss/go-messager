@@ -74,9 +74,10 @@ function goVerify() {
 function validate(): string {
   const name = form.name.trim()
   if (!name) return '请输入用户名'
+  if (isRegister.value && [...name].length < 2) return '用户名至少 2 个字符'
   if (!form.password) return '请输入密码'
   if (isRegister.value) {
-    if (form.password.length < 6) return '密码至少 6 位'
+    if (new TextEncoder().encode(form.password).length < 8) return '密码至少 8 个字节'
     if (form.password !== form.confirm) return '两次输入的密码不一致'
   }
   return ''

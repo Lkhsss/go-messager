@@ -119,6 +119,11 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 		return
 	}
 
+	if d.reactionLimiter != nil && !d.reactionLimiter.Allow(user.Name, d.limits.ReactionPerMinute) {
+		Response{}.Fail(c, http.StatusTooManyRequests, "REACTION_RATE_LIMITED", "互动过于频繁，请稍后再试")
+		return
+	}
+
 	postID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || postID == 0 {
 		Response{}.Fail(c, http.StatusBadRequest, "INVALID_ID", "文章 ID 无效")
@@ -127,7 +132,7 @@ func (d *Data) ToggleReaction(c *gin.Context) {
 
 	var req ReactionInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 	if !isValidReactionType(req.Type) {
@@ -315,38 +320,65 @@ func syncReactionCounts(db *gorm.DB) error {
 		addTo(userAggregates[item.Owner], item.Type, item.Total)
 	}
 
-	// 先清零，再写回有计数的行。
-	if err := db.Exec("UPDATE posts SET like_count = 0, dislike_count = 0, question_count = 0, emoji_counts = ''").Error; err != nil {
-		return fmt.Errorf("重置文章反应统计失败：%w", err)
-	}
-	if err := db.Exec("UPDATE users SET like_count = 0, dislike_count = 0, question_count = 0, emoji_counts = ''").Error; err != nil {
-		return fmt.Errorf("重置用户反应统计失败：%w", err)
-	}
+	// 只重置确实有脏计数的行，避免每次启动重写整张 posts/users 表。
+	// 有大正文的论坛里，全表 UPDATE 会产生与正文总量相当的 WAL 写入。
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Model(&Post{}).
+			Where("like_count <> 0 OR dislike_count <> 0 OR question_count <> 0 OR COALESCE(emoji_counts, '') <> ''").
+			Updates(map[string]any{
+				"like_count":     0,
+				"dislike_count":  0,
+				"question_count": 0,
+				"emoji_counts":   "",
+			}).Error; err != nil {
+			return fmt.Errorf("重置文章反应统计失败：%w", err)
+		}
+		if err := tx.Unscoped().Model(&User{}).
+			Where("like_count <> 0 OR dislike_count <> 0 OR question_count <> 0 OR COALESCE(emoji_counts, '') <> ''").
+			Updates(map[string]any{
+				"like_count":     0,
+				"dislike_count":  0,
+				"question_count": 0,
+				"emoji_counts":   "",
+			}).Error; err != nil {
+			return fmt.Errorf("重置用户反应统计失败：%w", err)
+		}
 
-	for postID, agg := range postAggregates {
-		emoji, err := json.Marshal(agg.emoji)
-		if err != nil {
-			return err
+		for postID, agg := range postAggregates {
+			emoji, err := json.Marshal(agg.emoji)
+			if err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Model(&Post{}).Where("id = ?", postID).
+				Updates(map[string]any{
+					"like_count":     agg.like,
+					"dislike_count":  agg.dislike,
+					"question_count": agg.question,
+					"emoji_counts":   string(emoji),
+				}).Error; err != nil {
+				return fmt.Errorf("更新文章反应统计失败：%w", err)
+			}
 		}
-		if err := db.Exec(
-			"UPDATE posts SET like_count = ?, dislike_count = ?, question_count = ?, emoji_counts = ? WHERE id = ?",
-			agg.like, agg.dislike, agg.question, string(emoji), postID,
-		).Error; err != nil {
-			return fmt.Errorf("更新文章反应统计失败：%w", err)
-		}
-	}
 
-	for name, agg := range userAggregates {
-		emoji, err := json.Marshal(agg.emoji)
-		if err != nil {
-			return err
+		for name, agg := range userAggregates {
+			emoji, err := json.Marshal(agg.emoji)
+			if err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Model(&User{}).Where("name = ?", name).
+				Updates(map[string]any{
+					"like_count":     agg.like,
+					"dislike_count":  agg.dislike,
+					"question_count": agg.question,
+					"emoji_counts":   string(emoji),
+				}).Error; err != nil {
+				return fmt.Errorf("更新用户反应统计失败：%w", err)
+			}
 		}
-		if err := db.Exec(
-			"UPDATE users SET like_count = ?, dislike_count = ?, question_count = ?, emoji_counts = ? WHERE name = ?",
-			agg.like, agg.dislike, agg.question, string(emoji), name,
-		).Error; err != nil {
-			return fmt.Errorf("更新用户反应统计失败：%w", err)
-		}
+
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	return nil

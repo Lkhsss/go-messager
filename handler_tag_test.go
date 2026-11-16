@@ -69,10 +69,25 @@ func newTestEnvWithConfig(t *testing.T, mutate func(*Config)) *testEnv {
 	if err := db.AutoMigrate(&User{}, &Post{}, &Tag{}, &Reaction{}, &Setting{}, &DailyTaskProgress{}); err != nil {
 		t.Fatalf("建表失败：%v", err)
 	}
+	if err := ensureDatabaseIndexes(db); err != nil {
+		t.Fatalf("建索引失败：%v", err)
+	}
 
 	r := gin.New()
 	cfg := DefaultConfig()
 	cfg.JWT.Secret = "test-secret"
+	// 多数接口测试会在同一天创建多篇内容相同的文章/评论，这里放宽限流与去重；
+	// 安全限制由专门的测试用例覆盖。
+	cfg.Limits.PostPerMinute = 10000
+	cfg.Limits.CommentPerMinute = 10000
+	cfg.Limits.ReactionPerMinute = 10000
+	cfg.Limits.NewAccountPostPerDay = 10000
+	cfg.Limits.NewAccountCommentPerDay = 10000
+	cfg.Limits.PostPerDay = 10000
+	cfg.Limits.CommentPerDay = 10000
+	cfg.Limits.RegisterPerIPPerHour = 10000
+	cfg.Limits.RegisterPerIPPerDay = 10000
+	cfg.Limits.DuplicateWindow = 0
 	if mutate != nil {
 		mutate(cfg)
 	}

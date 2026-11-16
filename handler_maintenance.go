@@ -25,7 +25,7 @@ func (d *Data) GetMaintenance(c *gin.Context) {
 func (d *Data) UpdateMaintenance(c *gin.Context) {
 	var req maintenanceInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 

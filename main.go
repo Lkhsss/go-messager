@@ -64,6 +64,11 @@ func main() {
 		panic(err)
 	}
 
+	// 建复合索引；大库首次启动会在维护窗口内扫描一次表。
+	if err := ensureDatabaseIndexes(db); err != nil {
+		panic(err)
+	}
+
 	// 启动时校准计数。
 	if err := syncTagUsageCounts(db); err != nil {
 		panic(err)

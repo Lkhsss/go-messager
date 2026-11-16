@@ -146,7 +146,7 @@ func (d *Data) SetAdminUserStatus(c *gin.Context) {
 
 	var req adminUserStatusInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
@@ -193,7 +193,7 @@ func (d *Data) SetAdminUserTrust(c *gin.Context) {
 
 	var req adminUserTrustInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
@@ -235,16 +235,15 @@ func (d *Data) SetAdminUserPassword(c *gin.Context) {
 
 	var req adminUserPasswordInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 	if req.Password == "" {
 		Response{}.Fail(c, http.StatusBadRequest, "PASSWORD_REQUIRED", "密码不能为空")
 		return
 	}
-	// bcrypt 最多 72 字节。
-	if len([]byte(req.Password)) > 72 {
-		Response{}.Fail(c, http.StatusBadRequest, "PASSWORD_TOO_LONG", "密码最多 72 字节")
+	if code, message := validatePassword(req.Password, d.limits); code != "" {
+		Response{}.Fail(c, http.StatusBadRequest, code, message)
 		return
 	}
 
@@ -349,32 +348,15 @@ func (d *Data) DeleteAdminUntrustedUsers(c *gin.Context) {
 			return err
 		}
 
-		if len(commentIDs) > 0 {
-			// 评论上的反应与标签关联一并清理，避免留下孤儿数据。
-			if err := tx.Unscoped().Where("post_id IN ?", commentIDs).Delete(&Reaction{}).Error; err != nil {
+		if len(commentIDs) > 0 || len(articleIDs) > 0 {
+			// 文章和评论连同反应、标签关联一起硬删除，分批执行。
+			allIDs := make([]uint, 0, len(articleIDs)+len(commentIDs))
+			allIDs = append(allIDs, articleIDs...)
+			allIDs = append(allIDs, commentIDs...)
+			if err := deletePostsWithRelations(tx, allIDs); err != nil {
 				return err
 			}
-			if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", commentIDs).Error; err != nil {
-				return err
-			}
-			result := tx.Unscoped().Where("id IN ?", commentIDs).Delete(&Post{})
-			if result.Error != nil {
-				return result.Error
-			}
-			comments += result.RowsAffected
-		}
-
-		if len(articleIDs) > 0 {
-			// 文章本身连同反应与标签关联一起硬删除。
-			if err := tx.Unscoped().Where("post_id IN ?", articleIDs).Delete(&Reaction{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", articleIDs).Error; err != nil {
-				return err
-			}
-			if err := tx.Unscoped().Where("id IN ?", articleIDs).Delete(&Post{}).Error; err != nil {
-				return err
-			}
+			comments = int64(len(commentIDs))
 		}
 
 		// 发出的反应与每日任务进度。

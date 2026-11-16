@@ -20,7 +20,9 @@ const form = reactive({
 
 function validate(): string {
   if (!form.name.trim()) return '请输入管理员用户名'
-  if (form.password.length < 6) return '密码至少 6 位'
+  const name = form.name.trim()
+  if ([...name].length < 2) return '用户名至少 2 个字符'
+  if (new TextEncoder().encode(form.password).length < 8) return '密码至少 8 个字节'
   if (form.password !== form.confirm) return '两次输入的密码不一致'
   return ''
 }

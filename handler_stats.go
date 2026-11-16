@@ -72,21 +72,28 @@ func (d *Data) GetMyStats(c *gin.Context) {
 	Response{}.Ok(c, http.StatusOK, stats)
 }
 
-// loadUserStats 统计用户文章和互动。
+// loadUserStats 统计用户文章和互动。用 SQL 聚合，避免把该用户所有文章加载进内存。
 func (d *Data) loadUserStats(name string) (UserStatsResponse, error) {
-	var posts []Post
-	if err := d.DB.Select("char_count", "like_count", "dislike_count", "question_count").
+	var row struct {
+		PostCount int64
+		WordCount int64
+		Like      int64
+		Dislike   int64
+		Question  int64
+	}
+	if err := d.DB.Model(&Post{}).
+		Select("COUNT(*) AS post_count, COALESCE(SUM(char_count), 0) AS word_count, COALESCE(SUM(like_count), 0) AS like, COALESCE(SUM(dislike_count), 0) AS dislike, COALESCE(SUM(question_count), 0) AS question").
 		Where("user = ? AND root_id IS NULL", name).
-		Find(&posts).Error; err != nil {
+		Scan(&row).Error; err != nil {
 		return UserStatsResponse{}, err
 	}
 
-	stats := UserStatsResponse{PostCount: int64(len(posts))}
-	for _, post := range posts {
-		stats.WordCount += post.CharCount
-		stats.Like += post.LikeCount
-		stats.Dislike += post.DislikeCount
-		stats.Question += post.QuestionCount
+	stats := UserStatsResponse{
+		PostCount: row.PostCount,
+		WordCount: row.WordCount,
+		Like:      row.Like,
+		Dislike:   row.Dislike,
+		Question:  row.Question,
 	}
 
 	if err := d.DB.Model(&Post{}).
@@ -252,19 +259,32 @@ func (d *Data) articleSeries(unit string, now time.Time) ([]TimePoint, error) {
 		points[i] = TimePoint{Label: formatSeriesLabel(unit, bucketAt(i))}
 	}
 
+	bucketExpr := "substr(created_at, 1, 10)"
+	layout := "2006-01-02"
+	if unit == "hour" {
+		bucketExpr = "substr(created_at, 1, 13)"
+		layout = "2006-01-02 15"
+	}
+
 	var rows []struct {
-		CreatedAt time.Time
+		Bucket string
+		Count  int64
 	}
 	if err := d.DB.Model(&Post{}).
-		Select("created_at").
+		Select(bucketExpr+" AS bucket, COUNT(*) AS count").
 		Where("root_id IS NULL AND created_at >= ?", start).
-		Find(&rows).Error; err != nil {
+		Group("bucket").
+		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
-		idx := indexOf(row.CreatedAt.In(now.Location()))
+		value, err := time.ParseInLocation(layout, row.Bucket, now.Location())
+		if err != nil {
+			continue
+		}
+		idx := indexOf(value)
 		if idx >= 0 && idx < size {
-			points[idx].Count++
+			points[idx].Count += row.Count
 		}
 	}
 
@@ -295,31 +315,40 @@ func (d *Data) interactionHeatmap(now time.Time) ([]HeatmapPoint, error) {
 		points[i] = HeatmapPoint{Date: key}
 		indexByDate[key] = i
 	}
-	add := func(t time.Time) {
-		key := t.In(loc).Format("2006-01-02")
+	add := func(key string, count int64) {
 		if i, ok := indexByDate[key]; ok {
-			points[i].Count++
+			points[i].Count += count
 		}
 	}
 
 	var posts []struct {
-		CreatedAt time.Time
+		Day   string
+		Count int64
 	}
-	if err := d.DB.Model(&Post{}).Select("created_at").Where("created_at >= ?", start).Find(&posts).Error; err != nil {
+	if err := d.DB.Model(&Post{}).
+		Select("substr(created_at, 1, 10) AS day, COUNT(*) AS count").
+		Where("created_at >= ?", start).
+		Group("day").
+		Scan(&posts).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range posts {
-		add(row.CreatedAt)
+		add(row.Day, row.Count)
 	}
 
 	var reactions []struct {
-		CreatedAt time.Time
+		Day   string
+		Count int64
 	}
-	if err := d.DB.Model(&Reaction{}).Select("created_at").Where("created_at >= ?", start).Find(&reactions).Error; err != nil {
+	if err := d.DB.Model(&Reaction{}).
+		Select("substr(created_at, 1, 10) AS day, COUNT(*) AS count").
+		Where("created_at >= ?", start).
+		Group("day").
+		Scan(&reactions).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range reactions {
-		add(row.CreatedAt)
+		add(row.Day, row.Count)
 	}
 
 	return points, nil

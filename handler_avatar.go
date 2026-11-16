@@ -19,7 +19,7 @@ func (d *Data) UpdateAvatar(c *gin.Context) {
 
 	var req AvatarInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 

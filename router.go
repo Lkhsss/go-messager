@@ -6,6 +6,8 @@ import (
 )
 
 func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
+	r.Use(bodyLimit(defaultMaxRequestBodyBytes))
+
 	data, err := NewData(db, cfg.JWT)
 	if err != nil {
 		return nil, err
@@ -18,6 +20,8 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 
 	data.CaptchaEnabled = cfg.Captcha.Enabled
 	data.RegisterEnabled = cfg.Register.Enabled
+	data.limits = cfg.Limits
+	data.initLimiters()
 
 	g := r.Group("/api")
 

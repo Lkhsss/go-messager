@@ -42,8 +42,17 @@ type Data struct {
 	captcha *CaptchaStore
 
 	// 登录限流：IP 每分钟次数与账号失败锁定。
-	loginIPLimiter   *rateLimiter
-	loginFailLimiter *rateLimiter
+	loginIPLimiter      *rateLimiter
+	loginFailLimiter    *rateLimiter
+	loginAccountLimiter *rateLimiter
+
+	// 发文/评论/反应限流与每 IP 注册限流。
+	limits              LimitsConfig
+	postLimiter         *rateLimiter
+	commentLimiter      *rateLimiter
+	reactionLimiter     *rateLimiter
+	registerHourLimiter *rateLimiter
+	registerDayLimiter  *rateLimiter
 
 	// 串行化首个用户的 admin 判定。
 	mu sync.Mutex
@@ -156,12 +165,12 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 	}
 
 	d := &Data{
-		DB:               db,
-		JWTTTL:           ttl,
-		captcha:          NewCaptchaStore(),
-		loginIPLimiter:   newRateLimiter(loginIPWindow),
-		loginFailLimiter: newRateLimiter(loginFailureWindow),
+		DB:      db,
+		JWTTTL:  ttl,
+		captcha: NewCaptchaStore(),
+		limits:  DefaultConfig().Limits,
 	}
+	d.initLimiters()
 
 	secret, err := ensureJWTSecret(db, cfg.Secret)
 	if err != nil {
@@ -175,6 +184,19 @@ func NewData(db *gorm.DB, cfg JWTConfig) (*Data, error) {
 	}
 
 	return d, nil
+}
+
+// initLimiters 初始化进程内限流器。窗口固定，数量上限来自配置。
+func (d *Data) initLimiters() {
+	d.loginIPLimiter = newRateLimiter(loginIPWindow)
+	d.loginFailLimiter = newRateLimiter(loginFailureWindow)
+	d.loginAccountLimiter = newRateLimiter(loginFailureWindow)
+
+	d.postLimiter = newRateLimiter(time.Minute)
+	d.commentLimiter = newRateLimiter(time.Minute)
+	d.reactionLimiter = newRateLimiter(time.Minute)
+	d.registerHourLimiter = newRateLimiter(time.Hour)
+	d.registerDayLimiter = newRateLimiter(24 * time.Hour)
 }
 
 // resolveJWTTTL：JWT_TTL > 配置 > 24h。

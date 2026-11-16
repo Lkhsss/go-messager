@@ -39,6 +39,7 @@ type Config struct {
 	JWT      JWTConfig
 	Captcha  CaptchaConfig
 	Register RegisterConfig
+	Limits   LimitsConfig
 }
 
 // ServerConfig HTTP 配置。
@@ -87,6 +88,35 @@ type RegisterConfig struct {
 	Enabled bool
 }
 
+// LimitsConfig 防刷与内容治理参数。
+type LimitsConfig struct {
+	// 所有用户的写入频率。
+	PostPerMinute     int
+	CommentPerMinute  int
+	ReactionPerMinute int
+
+	// 新账号判定窗口：注册不足该时长且未可信时使用更严格的每日配额。
+	NewAccountHours         time.Duration
+	NewAccountPostPerDay    int
+	NewAccountCommentPerDay int
+
+	// 普通老用户每日配额。
+	PostPerDay    int
+	CommentPerDay int
+
+	// 每 IP 成功注册次数上限。
+	RegisterPerIPPerHour int
+	RegisterPerIPPerDay  int
+
+	// 注册与修改密码时的用户名/密码约束。
+	MinPasswordBytes int
+	MinUsernameRunes int
+	MaxUsernameRunes int
+
+	// 同一用户相同正文的去重窗口。
+	DuplicateWindow time.Duration
+}
+
 // DefaultConfig 默认配置。
 func DefaultConfig() *Config {
 	return &Config{
@@ -110,6 +140,22 @@ func DefaultConfig() *Config {
 		},
 		Register: RegisterConfig{
 			Enabled: true,
+		},
+		Limits: LimitsConfig{
+			PostPerMinute:           5,
+			CommentPerMinute:        10,
+			ReactionPerMinute:       30,
+			NewAccountHours:         24 * time.Hour,
+			NewAccountPostPerDay:    5,
+			NewAccountCommentPerDay: 20,
+			PostPerDay:              200,
+			CommentPerDay:           500,
+			RegisterPerIPPerHour:    10,
+			RegisterPerIPPerDay:     20,
+			MinPasswordBytes:        8,
+			MinUsernameRunes:        2,
+			MaxUsernameRunes:        32,
+			DuplicateWindow:         24 * time.Hour,
 		},
 	}
 }
@@ -209,7 +255,110 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Register.Enabled = enabled
 	}
 
+	if err := loadLimits(f, &cfg.Limits); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// loadLimits 读取 [limits] 防刷配置并做基本范围校验。
+func loadLimits(f *ini.File, limits *LimitsConfig) error {
+	var err error
+
+	if limits.PostPerMinute, err = readInt(f, "limits", "post_per_minute", limits.PostPerMinute); err != nil {
+		return err
+	}
+	if limits.PostPerMinute < 1 || limits.PostPerMinute > 1000 {
+		return fmt.Errorf("配置项 [limits] post_per_minute 超出范围[%d]：需要在 1-1000 之间", limits.PostPerMinute)
+	}
+
+	if limits.CommentPerMinute, err = readInt(f, "limits", "comment_per_minute", limits.CommentPerMinute); err != nil {
+		return err
+	}
+	if limits.CommentPerMinute < 1 || limits.CommentPerMinute > 1000 {
+		return fmt.Errorf("配置项 [limits] comment_per_minute 超出范围[%d]：需要在 1-1000 之间", limits.CommentPerMinute)
+	}
+
+	if limits.ReactionPerMinute, err = readInt(f, "limits", "reaction_per_minute", limits.ReactionPerMinute); err != nil {
+		return err
+	}
+	if limits.ReactionPerMinute < 1 || limits.ReactionPerMinute > 10000 {
+		return fmt.Errorf("配置项 [limits] reaction_per_minute 超出范围[%d]：需要在 1-10000 之间", limits.ReactionPerMinute)
+	}
+
+	if limits.NewAccountHours, err = readDuration(f, "limits", "new_account_hours", limits.NewAccountHours); err != nil {
+		return err
+	}
+
+	if limits.NewAccountPostPerDay, err = readInt(f, "limits", "new_account_post_per_day", limits.NewAccountPostPerDay); err != nil {
+		return err
+	}
+	if limits.NewAccountPostPerDay < 1 {
+		return fmt.Errorf("配置项 [limits] new_account_post_per_day 需要大于 0")
+	}
+
+	if limits.NewAccountCommentPerDay, err = readInt(f, "limits", "new_account_comment_per_day", limits.NewAccountCommentPerDay); err != nil {
+		return err
+	}
+	if limits.NewAccountCommentPerDay < 1 {
+		return fmt.Errorf("配置项 [limits] new_account_comment_per_day 需要大于 0")
+	}
+
+	if limits.PostPerDay, err = readInt(f, "limits", "post_per_day", limits.PostPerDay); err != nil {
+		return err
+	}
+	if limits.PostPerDay < limits.NewAccountPostPerDay {
+		return fmt.Errorf("配置项 [limits] post_per_day[%d] 不能小于 new_account_post_per_day[%d]", limits.PostPerDay, limits.NewAccountPostPerDay)
+	}
+
+	if limits.CommentPerDay, err = readInt(f, "limits", "comment_per_day", limits.CommentPerDay); err != nil {
+		return err
+	}
+	if limits.CommentPerDay < limits.NewAccountCommentPerDay {
+		return fmt.Errorf("配置项 [limits] comment_per_day[%d] 不能小于 new_account_comment_per_day[%d]", limits.CommentPerDay, limits.NewAccountCommentPerDay)
+	}
+
+	if limits.RegisterPerIPPerHour, err = readInt(f, "limits", "register_per_ip_per_hour", limits.RegisterPerIPPerHour); err != nil {
+		return err
+	}
+	if limits.RegisterPerIPPerHour < 1 {
+		return fmt.Errorf("配置项 [limits] register_per_ip_per_hour 需要大于 0")
+	}
+
+	if limits.RegisterPerIPPerDay, err = readInt(f, "limits", "register_per_ip_per_day", limits.RegisterPerIPPerDay); err != nil {
+		return err
+	}
+	if limits.RegisterPerIPPerDay < limits.RegisterPerIPPerHour {
+		return fmt.Errorf("配置项 [limits] register_per_ip_per_day[%d] 不能小于 register_per_ip_per_hour[%d]", limits.RegisterPerIPPerDay, limits.RegisterPerIPPerHour)
+	}
+
+	if limits.MinPasswordBytes, err = readInt(f, "limits", "min_password_bytes", limits.MinPasswordBytes); err != nil {
+		return err
+	}
+	if limits.MinPasswordBytes < 6 || limits.MinPasswordBytes > 72 {
+		return fmt.Errorf("配置项 [limits] min_password_bytes 超出范围[%d]：需要在 6-72 之间", limits.MinPasswordBytes)
+	}
+
+	if limits.MinUsernameRunes, err = readInt(f, "limits", "min_username_runes", limits.MinUsernameRunes); err != nil {
+		return err
+	}
+	if limits.MinUsernameRunes < 1 || limits.MinUsernameRunes > 32 {
+		return fmt.Errorf("配置项 [limits] min_username_runes 超出范围[%d]：需要在 1-32 之间", limits.MinUsernameRunes)
+	}
+
+	if limits.MaxUsernameRunes, err = readInt(f, "limits", "max_username_runes", limits.MaxUsernameRunes); err != nil {
+		return err
+	}
+	if limits.MaxUsernameRunes < limits.MinUsernameRunes || limits.MaxUsernameRunes > 64 {
+		return fmt.Errorf("配置项 [limits] max_username_runes[%d] 需要在 %d-64 之间", limits.MaxUsernameRunes, limits.MinUsernameRunes)
+	}
+
+	if limits.DuplicateWindow, err = readDuration(f, "limits", "duplicate_window", limits.DuplicateWindow); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // readInt 读取整数，缺失时返回默认值。

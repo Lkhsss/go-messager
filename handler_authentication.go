@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -20,7 +21,44 @@ const (
 	loginFailureLimit  = 5
 	loginIPWindow      = time.Minute
 	loginFailureWindow = 15 * time.Minute
+	// 同一用户名跨 IP 的失败上限，防止分布式爆破；成功登录清零。
+	loginAccountFailureLimit = 30
 )
+
+// dummyPasswordHash 用于不存在用户时仍执行一次 bcrypt，避免通过响应时间枚举账号。
+var dummyPasswordHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("go-messager-dummy-password"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil
+	}
+	return hash
+}()
+
+// validateUsername 校验用户名长度与字符。
+func validateUsername(name string, limits LimitsConfig) (string, string) {
+	runes := []rune(name)
+	if len(runes) < limits.MinUsernameRunes || len(runes) > limits.MaxUsernameRunes {
+		return "INVALID_USERNAME", "用户名长度需要在 " + strconv.Itoa(limits.MinUsernameRunes) + "-" + strconv.Itoa(limits.MaxUsernameRunes) + " 个字符之间"
+	}
+	for _, r := range runes {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return "INVALID_USERNAME", "用户名不能包含空白或控制字符"
+		}
+	}
+	return "", ""
+}
+
+// validatePassword 校验密码字节长度；bcrypt 最多接受 72 字节。
+func validatePassword(password string, limits LimitsConfig) (string, string) {
+	size := len([]byte(password))
+	if size < limits.MinPasswordBytes {
+		return "WEAK_PASSWORD", "密码至少需要 " + strconv.Itoa(limits.MinPasswordBytes) + " 个字节"
+	}
+	if size > 72 {
+		return "PASSWORD_TOO_LONG", "密码最多 72 个字节"
+	}
+	return "", ""
+}
 
 // AuthResult 登录/注册结果。
 type AuthResult struct {
@@ -35,7 +73,7 @@ type AuthResult struct {
 func (d *Data) Authorize(c *gin.Context) {
 	var req Credentials
 	if err := c.ShouldBind(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
@@ -48,12 +86,14 @@ func (d *Data) Authorize(c *gin.Context) {
 	// 被爆破时先限流，避免产生无意义的数据库查询和 bcrypt 计算。
 	clientIP := c.ClientIP()
 	failKey := loginFailureKey(clientIP, req.Name)
+	accountKey := strings.ToLower(req.Name)
 	if !d.loginIPLimiter.Allow(clientIP, loginIPPerMinute) {
 		c.Header("Retry-After", strconv.Itoa(int(loginIPWindow/time.Second)))
 		Response{}.Fail(c, http.StatusTooManyRequests, "LOGIN_RATE_LIMITED", "登录尝试过于频繁，请稍后再试")
 		return
 	}
-	if d.loginFailLimiter.Exceeded(failKey, loginFailureLimit) {
+	if d.loginFailLimiter.Exceeded(failKey, loginFailureLimit) ||
+		d.loginAccountLimiter.Exceeded(accountKey, loginAccountFailureLimit) {
 		c.Header("Retry-After", strconv.Itoa(int(loginFailureWindow/time.Second)))
 		Response{}.Fail(c, http.StatusTooManyRequests, "LOGIN_LOCKED", "登录失败次数过多，请稍后再试")
 		return
@@ -61,9 +101,13 @@ func (d *Data) Authorize(c *gin.Context) {
 
 	user, err := d.GetUserByName(req.Name)
 	if err != nil {
-		// 不暴露账号是否存在。
+		// 不暴露账号是否存在：不存在时也做一次 bcrypt，再返回统一错误。
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if len(dummyPasswordHash) > 0 {
+				_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(req.Password))
+			}
 			d.loginFailLimiter.Allow(failKey, loginFailureLimit)
+			d.loginAccountLimiter.Allow(accountKey, loginAccountFailureLimit)
 			Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 			return
 		}
@@ -74,6 +118,7 @@ func (d *Data) Authorize(c *gin.Context) {
 	// 先校验密码再判断停用，避免用 403 探测用户。
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		d.loginFailLimiter.Allow(failKey, loginFailureLimit)
+		d.loginAccountLimiter.Allow(accountKey, loginAccountFailureLimit)
 		Response{}.Fail(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
@@ -91,6 +136,7 @@ func (d *Data) Authorize(c *gin.Context) {
 
 	// 登录成功清零失败计数。
 	d.loginFailLimiter.Reset(failKey)
+	d.loginAccountLimiter.Reset(accountKey)
 
 	token, expiresAt, err := d.issueToken(user)
 	if err != nil {
@@ -121,13 +167,21 @@ func (d *Data) Authorize(c *gin.Context) {
 func (d *Data) Register(c *gin.Context) {
 	var req RegisterInput
 	if err := c.ShouldBind(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.Password == "" {
 		Response{}.Fail(c, http.StatusBadRequest, "NEED_CREDENTIALS", "用户名和密码不能为空")
+		return
+	}
+	if code, message := validateUsername(req.Name, d.limits); code != "" {
+		Response{}.Fail(c, http.StatusBadRequest, code, message)
+		return
+	}
+	if code, message := validatePassword(req.Password, d.limits); code != "" {
+		Response{}.Fail(c, http.StatusBadRequest, code, message)
 		return
 	}
 
@@ -150,6 +204,16 @@ func (d *Data) Register(c *gin.Context) {
 		return
 	}
 
+	// 每个 IP 的成功注册次数限制；首个管理员初始化不受限。
+	clientIP := c.ClientIP()
+	if userCount > 0 &&
+		(d.registerHourLimiter.Exceeded(clientIP, d.limits.RegisterPerIPPerHour) ||
+			d.registerDayLimiter.Exceeded(clientIP, d.limits.RegisterPerIPPerDay)) {
+		c.Header("Retry-After", strconv.Itoa(int(time.Hour/time.Second)))
+		Response{}.Fail(c, http.StatusTooManyRequests, "REGISTER_RATE_LIMITED", "注册过于频繁，请稍后再试")
+		return
+	}
+
 	exists, err := d.IfUserExist(req.Name)
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
@@ -161,7 +225,7 @@ func (d *Data) Register(c *gin.Context) {
 	}
 
 	// 非首个用户必须带人机验证签发的 ticket；ticket 一次性，用后即作废。
-	if d.CaptchaEnabled && userCount > 0 && !d.captcha.ConsumeTicket(req.CaptchaTicket) {
+	if d.CaptchaEnabled && userCount > 0 && !d.captcha.ConsumeTicket(clientIP, req.CaptchaTicket) {
 		Response{}.Fail(c, http.StatusBadRequest, "CAPTCHA_REQUIRED", "请先完成人机验证")
 		return
 	}
@@ -176,6 +240,12 @@ func (d *Data) Register(c *gin.Context) {
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
+	}
+
+	// 只统计成功注册，避免验证码输错也消耗 IP 配额。
+	if userCount > 0 {
+		d.registerHourLimiter.Allow(clientIP, d.limits.RegisterPerIPPerHour)
+		d.registerDayLimiter.Allow(clientIP, d.limits.RegisterPerIPPerDay)
 	}
 
 	// 注册后直接签发 token。

@@ -55,6 +55,21 @@ func TestLoadConfigMissingFileUsesDefaults(t *testing.T) {
 	if !cfg.Register.Enabled {
 		t.Fatal("注册默认应开启")
 	}
+	if cfg.Limits.PostPerMinute != 5 || cfg.Limits.CommentPerMinute != 10 || cfg.Limits.ReactionPerMinute != 30 {
+		t.Fatalf("limits 频率默认值异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.NewAccountPostPerDay != 5 || cfg.Limits.PostPerDay != 200 {
+		t.Fatalf("limits 发文配额默认值异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.RegisterPerIPPerHour != 10 || cfg.Limits.RegisterPerIPPerDay != 20 {
+		t.Fatalf("limits 注册默认值异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.MinPasswordBytes != 8 || cfg.Limits.MinUsernameRunes != 2 || cfg.Limits.MaxUsernameRunes != 32 {
+		t.Fatalf("limits 账号约束默认值异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.DuplicateWindow != 24*time.Hour {
+		t.Fatalf("limits 去重窗口默认值异常：%s", cfg.Limits.DuplicateWindow)
+	}
 }
 
 func TestLoadConfigFromFile(t *testing.T) {
@@ -83,6 +98,22 @@ enabled = false
 
 [register]
 enabled = false
+
+[limits]
+post_per_minute = 3
+comment_per_minute = 6
+reaction_per_minute = 12
+new_account_hours = 12h
+new_account_post_per_day = 2
+new_account_comment_per_day = 4
+post_per_day = 20
+comment_per_day = 40
+register_per_ip_per_hour = 2
+register_per_ip_per_day = 5
+min_password_bytes = 10
+min_username_runes = 3
+max_username_runes = 20
+duplicate_window = 6h
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("写入测试配置失败：%v", err)
@@ -116,6 +147,24 @@ enabled = false
 	}
 	if cfg.Register.Enabled {
 		t.Fatal("register.enabled = false 时注册应关闭")
+	}
+	if cfg.Limits.PostPerMinute != 3 || cfg.Limits.CommentPerMinute != 6 || cfg.Limits.ReactionPerMinute != 12 {
+		t.Fatalf("limits 频率解析异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.NewAccountHours != 12*time.Hour || cfg.Limits.NewAccountPostPerDay != 2 {
+		t.Fatalf("limits 新账号配置解析异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.PostPerDay != 20 || cfg.Limits.CommentPerDay != 40 {
+		t.Fatalf("limits 每日配额解析异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.RegisterPerIPPerHour != 2 || cfg.Limits.RegisterPerIPPerDay != 5 {
+		t.Fatalf("limits 注册限制解析异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.MinPasswordBytes != 10 || cfg.Limits.MinUsernameRunes != 3 || cfg.Limits.MaxUsernameRunes != 20 {
+		t.Fatalf("limits 账号约束解析异常：%+v", cfg.Limits)
+	}
+	if cfg.Limits.DuplicateWindow != 6*time.Hour {
+		t.Fatalf("limits 去重窗口解析异常：%s", cfg.Limits.DuplicateWindow)
 	}
 }
 
@@ -176,6 +225,10 @@ func TestLoadConfigInvalidValues(t *testing.T) {
 		{name: "busy_timeout 非法", body: "[database]\nbusy_timeout = abc\n", want: "[database] busy_timeout"},
 		{name: "max_open_conns 非整数", body: "[database]\nmax_open_conns = abc\n", want: "[database] max_open_conns"},
 		{name: "max_open_conns 越界", body: "[database]\nmax_open_conns = 99\n", want: "[database] max_open_conns"},
+		{name: "post_per_minute 越界", body: "[limits]\npost_per_minute = 0\n", want: "[limits] post_per_minute"},
+		{name: "min_password_bytes 越界", body: "[limits]\nmin_password_bytes = 1\n", want: "[limits] min_password_bytes"},
+		{name: "注册日上限小于小时上限", body: "[limits]\nregister_per_ip_per_day = 1\n", want: "register_per_ip_per_day"},
+		{name: "每日文章配额小于新账号配额", body: "[limits]\npost_per_day = 1\n", want: "post_per_day"},
 	}
 
 	for _, tt := range tests {

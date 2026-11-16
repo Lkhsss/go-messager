@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -40,6 +43,102 @@ func validatePostLengths(title, subtitle, body string) (string, string) {
 	return "", ""
 }
 
+// writeKind 区分文章与评论的写入配额。
+type writeKind int
+
+const (
+	writeArticle writeKind = iota
+	writeComment
+)
+
+// postBodyHash 忽略空白后计算 SHA-256，用于拦截同一用户的重复内容。
+func postBodyHash(body string) string {
+	normalized := strings.Join(strings.Fields(body), "")
+	sum := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(sum[:])
+}
+
+// startOfDay 返回服务器本地时区的当天零点。
+func startOfDay(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+}
+
+// duplicateBodyExists 检查同一用户在窗口内是否已发布相同正文。
+func (d *Data) duplicateBodyExists(user, hash string, comment bool, since time.Time, excludeID uint) (bool, error) {
+	query := d.DB.Model(&Post{}).
+		Where("user = ? AND body_hash = ? AND created_at >= ?", user, hash, since)
+	if comment {
+		query = query.Where("root_id IS NOT NULL")
+	} else {
+		query = query.Where("root_id IS NULL")
+	}
+	if excludeID > 0 {
+		query = query.Where("id <> ?", excludeID)
+	}
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// allowWrite 检查分钟级频率和当天配额。返回非 0 状态码表示拒绝。
+func (d *Data) allowWrite(user User, kind writeKind) (int, string, string) {
+	var (
+		limiter   *rateLimiter
+		perMinute int
+		perDay    int
+		newPerDay int
+		rateCode  string
+		rateMsg   string
+	)
+	switch kind {
+	case writeArticle:
+		limiter, perMinute, perDay, newPerDay = d.postLimiter, d.limits.PostPerMinute, d.limits.PostPerDay, d.limits.NewAccountPostPerDay
+		rateCode, rateMsg = "POST_RATE_LIMITED", "发文过于频繁，请稍后再试"
+	case writeComment:
+		limiter, perMinute, perDay, newPerDay = d.commentLimiter, d.limits.CommentPerMinute, d.limits.CommentPerDay, d.limits.NewAccountCommentPerDay
+		rateCode, rateMsg = "COMMENT_RATE_LIMITED", "评论过于频繁，请稍后再试"
+	default:
+		return 0, "", ""
+	}
+
+	if limiter == nil || !limiter.Allow(user.Name, perMinute) {
+		return http.StatusTooManyRequests, rateCode, rateMsg
+	}
+
+	limit := perDay
+	if !user.Trusted && user.Role != RoleAdmin && d.limits.NewAccountHours > 0 &&
+		time.Since(user.CreatedAt) < d.limits.NewAccountHours {
+		limit = newPerDay
+	}
+	if limit <= 0 {
+		return 0, "", ""
+	}
+
+	query := d.DB.Unscoped().Model(&Post{}).
+		Where("user = ? AND created_at >= ?", user.Name, startOfDay(time.Now()))
+	if kind == writeArticle {
+		query = query.Where("root_id IS NULL")
+	} else {
+		query = query.Where("root_id IS NOT NULL")
+	}
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return http.StatusInternalServerError, "QUERY_FAILED", err.Error()
+	}
+	if count < int64(limit) {
+		return 0, "", ""
+	}
+
+	if kind == writeArticle {
+		return http.StatusTooManyRequests, "POST_QUOTA_EXCEEDED", fmt.Sprintf("今日最多发布 %d 篇文章", limit)
+	}
+	return http.StatusTooManyRequests, "COMMENT_QUOTA_EXCEEDED", fmt.Sprintf("今日最多发表 %d 条评论", limit)
+}
+
 // buildExcerpt 从 Markdown 生成纯文本摘要。
 func buildExcerpt(body string) string {
 	text := markdownFencePattern.ReplaceAllString(body, " ")
@@ -75,7 +174,7 @@ func (d *Data) NewPost(c *gin.Context) {
 
 	var req PostInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
@@ -83,6 +182,25 @@ func (d *Data) NewPost(c *gin.Context) {
 		Response{}.Fail(c, http.StatusBadRequest, code, message)
 		return
 	}
+
+	// 先做内存限流和当天配额，再做内容去重；两道检查都能在写库前拦截灌水。
+	if status, code, message := d.allowWrite(user, writeArticle); status != 0 {
+		Response{}.Fail(c, status, code, message)
+		return
+	}
+	bodyHash := postBodyHash(req.Body)
+	if d.limits.DuplicateWindow > 0 {
+		duplicated, err := d.duplicateBodyExists(user.Name, bodyHash, false, time.Now().Add(-d.limits.DuplicateWindow), 0)
+		if err != nil {
+			Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+			return
+		}
+		if duplicated {
+			Response{}.Fail(c, http.StatusConflict, "DUPLICATE_POST", "请勿重复发布相同内容")
+			return
+		}
+	}
+
 	// 去重后再判断数量。
 	tagIDs := uniqueIDs(req.TagIDs)
 	if len(tagIDs) > maxTagsPerPost {
@@ -109,6 +227,7 @@ func (d *Data) NewPost(c *gin.Context) {
 		Body:      req.Body,
 		Excerpt:   buildExcerpt(req.Body),
 		CharCount: countTextCharacters(req.Title, req.Subtitle, req.Body),
+		BodyHash:  bodyHash,
 		Tags:      tags,
 	}
 
@@ -262,7 +381,7 @@ func (d *Data) UpdatePost(c *gin.Context) {
 
 	var req PostInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 
@@ -270,6 +389,20 @@ func (d *Data) UpdatePost(c *gin.Context) {
 		Response{}.Fail(c, http.StatusBadRequest, code, message)
 		return
 	}
+
+	bodyHash := postBodyHash(req.Body)
+	if d.limits.DuplicateWindow > 0 {
+		duplicated, err := d.duplicateBodyExists(user.Name, bodyHash, false, time.Now().Add(-d.limits.DuplicateWindow), id)
+		if err != nil {
+			Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+			return
+		}
+		if duplicated {
+			Response{}.Fail(c, http.StatusConflict, "DUPLICATE_POST", "请勿重复发布相同内容")
+			return
+		}
+	}
+
 	tagIDs := uniqueIDs(req.TagIDs)
 	if len(tagIDs) > maxTagsPerPost {
 		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
@@ -317,6 +450,7 @@ func (d *Data) UpdatePost(c *gin.Context) {
 			"body":       req.Body,
 			"excerpt":    excerpt,
 			"char_count": charCount,
+			"body_hash":  bodyHash,
 		}).Error; err != nil {
 			return err
 		}
@@ -335,6 +469,7 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	post.Body = req.Body
 	post.Excerpt = excerpt
 	post.CharCount = charCount
+	post.BodyHash = bodyHash
 	post.Tags = tags
 
 	result := []Post{post}
@@ -422,7 +557,10 @@ func collectCommentDescendants(tx *gorm.DB, rootID uint) ([]uint, error) {
 	return ids, nil
 }
 
-const maxCommentLength = 10000
+const (
+	maxCommentLength       = 10000
+	commentDuplicateWindow = 10 * time.Minute
+)
 
 // GetComments 文章评论（扁平列表）。
 func (d *Data) GetComments(c *gin.Context) {
@@ -450,7 +588,7 @@ func (d *Data) GetComments(c *gin.Context) {
 
 	var comments []Post
 	if err := d.DB.Where("root_id = ?", rootID).
-		Order("created_at ASC, id ASC").
+		Order("id ASC").
 		Find(&comments).Error; err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
 		return
@@ -479,7 +617,7 @@ func (d *Data) CreateComment(c *gin.Context) {
 
 	var req CommentInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 	body := strings.TrimSpace(req.Body)
@@ -490,6 +628,23 @@ func (d *Data) CreateComment(c *gin.Context) {
 	if len([]rune(body)) > maxCommentLength {
 		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", "评论内容最多 10000 个字符")
 		return
+	}
+
+	if status, code, message := d.allowWrite(user, writeComment); status != 0 {
+		Response{}.Fail(c, status, code, message)
+		return
+	}
+	bodyHash := postBodyHash(body)
+	if d.limits.DuplicateWindow > 0 {
+		duplicated, err := d.duplicateBodyExists(user.Name, bodyHash, true, time.Now().Add(-commentDuplicateWindow), 0)
+		if err != nil {
+			Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+			return
+		}
+		if duplicated {
+			Response{}.Fail(c, http.StatusConflict, "DUPLICATE_COMMENT", "请勿重复发布相同评论")
+			return
+		}
 	}
 
 	var root Post
@@ -527,6 +682,7 @@ func (d *Data) CreateComment(c *gin.Context) {
 	comment := Post{
 		User:     user.Name,
 		Body:     body,
+		BodyHash: bodyHash,
 		RootID:   &root.ID,
 		ParentID: parentID,
 	}
@@ -620,12 +776,12 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 		return
 	}
 
-	// 新文章在前，同一时间用 id 兜底。
+	// 新文章在前。id 是自增主键，反向扫描即可，避免对大表做临时排序。
 	var posts []Post
 	if err := base().
 		Select("id", "created_at", "updated_at", "deleted_at", "user", "title", "subtitle", "excerpt", "is_private", "parent_id", "root_id", "like_count", "dislike_count", "question_count", "emoji_counts", "char_count").
 		Preload("Tags").
-		Order("created_at DESC, id DESC").
+		Order("id DESC").
 		Limit(perPage).
 		Offset((page - 1) * perPage).
 		Find(&posts).Error; err != nil {

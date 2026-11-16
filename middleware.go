@@ -120,6 +120,19 @@ func CurrentUser(c *gin.Context) (User, bool) {
 	return user, ok
 }
 
+// 请求体上限，避免 ShouldBindJSON 把超大 JSON 全读进内存。
+const defaultMaxRequestBodyBytes int64 = 1 << 20
+
+// bodyLimit 用 MaxBytesReader 限制请求体大小，超出时由 respondBindError 映射为 413。
+func bodyLimit(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		}
+		c.Next()
+	}
+}
+
 // 已压缩格式，跳过 gzip。
 var gzipExcludedExtensions = []string{
 	".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",

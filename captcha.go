@@ -262,6 +262,7 @@ type captchaEntry struct {
 // captchaTicketEntry 已通过验证的一次性凭证。
 type captchaTicketEntry struct {
 	expiresAt time.Time
+	ip        string
 }
 
 // rateWindowState 单 IP 的时间窗口计数。
@@ -377,7 +378,7 @@ func (s *CaptchaStore) verify(now time.Time, ip, id, answer string) (CaptchaTick
 	if err != nil {
 		return CaptchaTicket{}, err
 	}
-	s.tickets[ticket] = captchaTicketEntry{expiresAt: now.Add(captchaTicketTTL)}
+	s.tickets[ticket] = captchaTicketEntry{expiresAt: now.Add(captchaTicketTTL), ip: ip}
 
 	return CaptchaTicket{
 		Ticket:    ticket,
@@ -385,12 +386,12 @@ func (s *CaptchaStore) verify(now time.Time, ip, id, answer string) (CaptchaTick
 	}, nil
 }
 
-// ConsumeTicket 原子消费 ticket，返回是否有效。注册成功前调用。
-func (s *CaptchaStore) ConsumeTicket(ticket string) bool {
-	return s.consumeTicket(time.Now(), ticket)
+// ConsumeTicket 原子消费 ticket，并校验签发时的 IP。
+func (s *CaptchaStore) ConsumeTicket(ip, ticket string) bool {
+	return s.consumeTicket(time.Now(), ip, ticket)
 }
 
-func (s *CaptchaStore) consumeTicket(now time.Time, ticket string) bool {
+func (s *CaptchaStore) consumeTicket(now time.Time, ip, ticket string) bool {
 	ticket = strings.TrimSpace(ticket)
 	if ticket == "" {
 		return false
@@ -406,7 +407,10 @@ func (s *CaptchaStore) consumeTicket(now time.Time, ticket string) bool {
 	}
 	delete(s.tickets, ticket)
 
-	return !now.After(entry.expiresAt)
+	if now.After(entry.expiresAt) {
+		return false
+	}
+	return entry.ip == ip
 }
 
 // peekAnswer 仅用于测试读取答案，生产代码不要调用。

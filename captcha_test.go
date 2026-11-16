@@ -207,7 +207,7 @@ func TestCaptchaTicketExpires(t *testing.T) {
 		t.Fatalf("校验验证码失败：%v", err)
 	}
 
-	if store.consumeTicket(time.Now().Add(captchaTicketTTL+time.Second), ticket.Ticket) {
+	if store.consumeTicket(time.Now().Add(captchaTicketTTL+time.Second), "192.0.2.1", ticket.Ticket) {
 		t.Fatal("过期 ticket 不应通过")
 	}
 }

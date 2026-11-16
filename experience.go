@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // 每日任务 key。
@@ -100,16 +99,24 @@ func (d *Data) dailyLoginPending(userID uint, date string) (bool, error) {
 	return !progress.LoginDone, nil
 }
 
-// ensureDailyProgress 取当天进度，没有则创建；并发创建由唯一索引兜底。
+// ensureDailyProgress 取当天进度，没有则创建；唯一索引兜底并发创建。
 func ensureDailyProgress(tx *gorm.DB, userID uint, date string) (DailyTaskProgress, error) {
-	err := tx.Clauses(clause.OnConflict{DoNothing: true}).
-		Create(&DailyTaskProgress{UserID: userID, Date: date}).Error
-	if err != nil {
+	var progress DailyTaskProgress
+	err := tx.Where("user_id = ? AND date = ?", userID, date).Take(&progress).Error
+	if err == nil {
+		return progress, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return DailyTaskProgress{}, err
 	}
 
-	var progress DailyTaskProgress
-	if err := tx.Where("user_id = ? AND date = ?", userID, date).Take(&progress).Error; err != nil {
+	progress = DailyTaskProgress{UserID: userID, Date: date}
+	if err := tx.Create(&progress).Error; err != nil {
+		// 并发插入时唯一索引会报错，重新读取一次。
+		var existing DailyTaskProgress
+		if readErr := tx.Where("user_id = ? AND date = ?", userID, date).Take(&existing).Error; readErr == nil {
+			return existing, nil
+		}
 		return DailyTaskProgress{}, err
 	}
 
@@ -140,12 +147,48 @@ func countDailyInteraction(tx *gorm.DB, progressID uint) (bool, error) {
 	return result.RowsAffected > 0, nil
 }
 
+// dailyTaskCompleted 判断当天任务是否已完成。已完成时直接跳过写事务，
+// 避免高频写文章/互动时反复 INSERT ... ON CONFLICT 和条件 UPDATE。
+func (d *Data) dailyTaskCompleted(userID uint, task DailyTaskKey, date string) (bool, error) {
+	var progress DailyTaskProgress
+	err := d.DB.Select("login_done", "article_done", "comment_done", "interaction_count").
+		Where("user_id = ? AND date = ?", userID, date).
+		Take(&progress).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	switch task {
+	case DailyTaskLogin:
+		return progress.LoginDone, nil
+	case DailyTaskArticle:
+		return progress.ArticleDone, nil
+	case DailyTaskComment:
+		return progress.CommentDone, nil
+	case DailyTaskInteraction:
+		return progress.InteractionCount >= DailyInteractionLimit, nil
+	default:
+		return true, nil
+	}
+}
+
 // awardDailyTask 发放每日任务经验。今日已完成或达到上限时返回 nil。
 func (d *Data) awardDailyTask(userID uint, task DailyTaskKey, reward int64, now time.Time) (*XPGain, error) {
 	date := dailyTaskDate(now)
 
+	done, err := d.dailyTaskCompleted(userID, task, date)
+	if err != nil {
+		return nil, err
+	}
+	if done {
+		return nil, nil
+	}
+
 	var gain *XPGain
-	err := d.DB.Transaction(func(tx *gorm.DB) error {
+	err = d.DB.Transaction(func(tx *gorm.DB) error {
 		progress, err := ensureDailyProgress(tx, userID, date)
 		if err != nil {
 			return err

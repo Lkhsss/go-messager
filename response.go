@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 // Response 统一响应结构。
@@ -45,4 +47,15 @@ func (r Response) Fail(c *gin.Context, status int, code, message string) {
 		Success: false,
 		Error:   &ErrorInfo{Code: code, Message: message},
 	})
+}
+
+// respondBindError 把请求体解析错误映射成统一响应；超过 MaxBytesReader 上限时返回 413。
+func respondBindError(c *gin.Context, err error, code string) {
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		Response{}.Fail(c, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE", "请求体过大")
+		return
+	}
+
+	Response{}.Fail(c, http.StatusBadRequest, code, err.Error())
 }

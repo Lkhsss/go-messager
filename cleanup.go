@@ -540,19 +540,29 @@ func cleanupOrphanDailyTasks(tx *gorm.DB) (int64, error) {
 }
 
 // deletePostsWithRelations 硬删除帖子及其反应、标签关联。
+// 分批执行，避免一次绑定过多变量，也降低单条 SQL 的峰值开销。
+const cleanupDeleteBatchSize = 500
+
 func deletePostsWithRelations(tx *gorm.DB, ids []uint) error {
-	if len(ids) == 0 {
-		return nil
+	for start := 0; start < len(ids); start += cleanupDeleteBatchSize {
+		end := start + cleanupDeleteBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := ids[start:end]
+
+		if err := tx.Unscoped().Where("post_id IN ?", batch).Delete(&Reaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", batch).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Where("id IN ?", batch).Delete(&Post{}).Error; err != nil {
+			return err
+		}
 	}
 
-	if err := tx.Unscoped().Where("post_id IN ?", ids).Delete(&Reaction{}).Error; err != nil {
-		return err
-	}
-	if err := tx.Exec("DELETE FROM post_tags WHERE post_id IN ?", ids).Error; err != nil {
-		return err
-	}
-
-	return tx.Unscoped().Where("id IN ?", ids).Delete(&Post{}).Error
+	return nil
 }
 
 // collectDescendantsIncluding 返回给定帖子及其全部后代（含软删除）。

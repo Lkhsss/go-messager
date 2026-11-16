@@ -101,19 +101,21 @@ type AvatarInput struct {
 
 type Post struct {
 	gorm.Model
-	User     string `json:"user"` // 作者由服务端根据登录态写入，不接受客户端传值
+	User     string `gorm:"index:idx_posts_user_root,priority:1;index:idx_posts_user_hash,priority:1" json:"user"` // 作者由服务端根据登录态写入，不接受客户端传值
 	Title    string `json:"title" binding:"required"`
 	Subtitle string `json:"subtitle"`
 	Body     string `json:"body,omitempty" binding:"required"`
 	// 评论树：原文为空；顶层评论只有 RootID；回复同时有 ParentID 和 RootID。
 	ParentID *uint `gorm:"index" json:"parent_id,omitempty"`
-	RootID   *uint `gorm:"index" json:"root_id,omitempty"`
+	RootID   *uint `gorm:"index;index:idx_posts_user_root,priority:2" json:"root_id,omitempty"`
 
 	// 仅作者与管理员可见。
 	IsPrivate bool `gorm:"not null;default:false" json:"private"`
 	// Excerpt 纯文本摘要，CharCount 字数。
 	Excerpt   string `gorm:"type:text" json:"excerpt"`
 	CharCount int64  `gorm:"not null;default:0" json:"-"`
+	// BodyHash 正文归一化后的 SHA-256，用于拦截同一用户的重复内容。
+	BodyHash string `gorm:"size:64;not null;default:'';index:idx_posts_user_hash,priority:2" json:"-"`
 
 	// 多对多标签。
 	Tags []Tag `gorm:"many2many:post_tags;" json:"tags"`
@@ -153,7 +155,7 @@ const (
 type Reaction struct {
 	ID        uint         `gorm:"primaryKey"`
 	PostID    uint         `gorm:"uniqueIndex:idx_reaction_unique,priority:1"`
-	UserID    uint         `gorm:"uniqueIndex:idx_reaction_unique,priority:2"`
+	UserID    uint         `gorm:"uniqueIndex:idx_reaction_unique,priority:2;index"`
 	Type      ReactionType `gorm:"uniqueIndex:idx_reaction_unique,priority:3;size:16"`
 	CreatedAt time.Time
 }

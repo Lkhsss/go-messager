@@ -33,7 +33,7 @@ func (d *Data) VerifyCaptcha(c *gin.Context) {
 
 	var req captchaVerifyInput
 	if err := c.ShouldBind(&req); err != nil {
-		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", err.Error())
+		respondBindError(c, err, "INVALID_BODY")
 		return
 	}
 

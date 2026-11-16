@@ -1,4 +1,4 @@
-# Go Messager v0.9.0
+# Go Messager v0.11.0
 
 [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 [![CI TEST](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/ci.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=ci.yml)
@@ -45,6 +45,20 @@ Copy-Item conf/app.min.ini conf/app.ini
 | `jwt.ttl`         | `24h`            | `JWT_TTL` 环境变量优先                                                      |
 | `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
 | `register.enabled` | `true`          | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                     |
+| `limits.post_per_minute` | `5`        | 所有用户每分钟最多发文数                                                    |
+| `limits.comment_per_minute` | `10`    | 所有用户每分钟最多评论数                                                    |
+| `limits.reaction_per_minute` | `30`   | 所有用户每分钟最多互动数                                                    |
+| `limits.new_account_hours` | `24h`     | 新账号判定窗口：注册不足该时长且未可信时使用严格配额                         |
+| `limits.new_account_post_per_day` | `5` | 新账号每天最多发文数                                                      |
+| `limits.new_account_comment_per_day` | `20` | 新账号每天最多评论数                                                  |
+| `limits.post_per_day` | `200`          | 普通用户每天最多发文数                                                      |
+| `limits.comment_per_day` | `500`       | 普通用户每天最多评论数                                                      |
+| `limits.register_per_ip_per_hour` | `10` | 同一 IP 每小时最多成功注册数                                              |
+| `limits.register_per_ip_per_day` | `20` | 同一 IP 每天最多成功注册数                                                |
+| `limits.min_password_bytes` | `8`     | 注册/修改密码的最小字节数                                                   |
+| `limits.min_username_runes` | `2`     | 用户名最小字符数                                                            |
+| `limits.max_username_runes` | `32`    | 用户名最大字符数                                                            |
+| `limits.duplicate_window` | `24h`      | 同一用户相同正文的去重窗口                                                  |
 | `server.trusted_proxies` | 空         | 逗号分隔的反向代理 IP/网段；留空不信任 `X-Forwarded-For`                  |
 | `database.busy_timeout` | `5s`        | SQLite 写锁等待时间                                                       |
 | `database.max_open_conns` | `1`       | 连接池上限；SQLite 建议 1，串行写避免 `database is locked`                |
@@ -80,6 +94,21 @@ docker run -d --name go-messager -p 8080:8080 \
 
 关闭注册：设置 `[register] enabled = false` 并重启后，除全库还没有用户时的首个管理员初始化外，`POST /api/register` 统一返回 `403` + `REGISTER_DISABLED`；登录页隐藏注册入口，`/verify` 直接跳回登录页，已有账号的登录和使用不受影响。
 
+## 防刷与内容治理
+
+`[limits]` 控制发文、评论、互动和注册频率，默认值面向小型论坛：
+
+- 所有用户每分钟最多 5 篇文章、10 条评论、30 次互动。
+- 注册不足 `new_account_hours`（默认 24h）且未标记可信的账号：每天最多 5 篇文章、20 条评论；管理员可在用户管理里标记可信后解除该限制。
+- 老用户默认每天 200 篇文章、500 条评论。
+- 同一 IP 默认每小时最多成功注册 10 个、每天 20 个账号。
+- 密码至少 8 字节、最多 72 字节；用户名 2–32 个字符且不能包含空白/控制字符。
+- 同一用户 24h 内发布相同正文（忽略空白）返回 `409 DUPLICATE_POST`；评论使用 10 分钟窗口。
+- 请求体默认上限 1MiB，超出返回 `413 BODY_TOO_LARGE`。
+- 登录增加按用户名的跨 IP 失败上限，对不存在的账号也执行一次 bcrypt，避免通过响应时间枚举用户。
+
+反向代理部署仍需配置 `[server] trusted_proxies`，否则所有请求会被识别为同一个 IP，按 IP 的注册/登录限流会失真。
+
 ## 维护模式
 
 管理员可在「管理 → 维护模式」开启站点维护：
@@ -109,6 +138,18 @@ docker run -d --name go-messager -p 8080:8080 \
 - 接口：`GET /api/admin/cleanup`（统计）、`DELETE /api/admin/cleanup/:key`（单类）、`DELETE /api/admin/cleanup`（全部）、`POST /api/admin/cleanup/vacuum`（压缩数据库）。
 - 清理为硬删除且不可恢复，完成后会自动重新校准标签使用次数与反应统计。
 - 「压缩数据库」执行 `VACUUM`，会重建数据库文件并回收空闲页，建议在低峰时段操作。
+
+### 被灌水后的应急清理
+
+如果站点被账号农场批量注册并灌入大量文章，建议按以下顺序处理：
+
+1. 管理 → 维护模式，停止普通用户写入；停服后备份整个 `data` 目录。
+2. 「用户管理 → 清理未可信用户」删除攻击账号及其文章、评论、反应和每日任务。
+3. 「清理 → 已删除文章」清掉历史软删除文章。
+4. 执行「压缩数据库」，或停服后运行 `sqlite3 data.db "VACUUM;"`。
+5. 确认磁盘至少有数据库 1.5 倍的空闲空间；大库 `VACUUM` 需要重建整个文件。
+
+以本次实测数据为例：26,288 篇文章、673MB 的库中，19,257 篇是同一账号农场灌入的重复正文（每篇 9,792 字、正文完全相同）。删除攻击账号和软删除文章后，`VACUUM` 将文件压缩到 **约 524KB**。
 
 ## SQLite 并发与登录限流
 
