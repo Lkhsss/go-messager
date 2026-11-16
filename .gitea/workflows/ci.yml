@@ -33,6 +33,9 @@ jobs:
       # 后端用 //go:embed template/dist 内嵌前端，需要真实产物；
       # type-check 已在上一行单独执行，这里只跑 vite build，不重复类型检查。
       - run: pnpm run build-only
+      # 产物体积是前端最直接的性能指标，生成清单留给 report 汇总
+      - name: 统计构建产物体积
+        run: du -ah dist | sort -k2 > dist-size.txt
       - name: 上传前端产物
         uses: actions/upload-artifact@v7
         with:
@@ -40,6 +43,13 @@ jobs:
           # path 相对仓库根目录，不受 defaults.run.working-directory 影响
           path: template/dist
           # 产物缺失时直接失败，避免后端拿到空目录后 go:embed 报错
+          if-no-files-found: error
+      # 体积清单单独成包，避免和 dist 同包时下载路径被多加一层 dist/
+      - name: 上传产物体积清单
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist-size
+          path: template/dist-size.txt
           if-no-files-found: error
 
   backend:
@@ -78,11 +88,81 @@ jobs:
           go env -w GOPROXY="https://goproxy.cn,direct"
           go env -w GOSUMDB=sum.golang.google.cn
       - name: 测试
+        run: go test -failfast -coverprofile=coverage.out ./...
+      # 测试失败时 go test 仍会写出 coverage.out；编译失败则没有，所以先判断再生成
+      - name: 生成覆盖率报告
+        if: always()
         run: |
-          go test -failfast
+          if [ ! -f coverage.out ]; then
+            echo "未生成 coverage.out，跳过覆盖率报告"
+            exit 0
+          fi
+          go tool cover -func=coverage.out | tee coverage.txt
+          go tool cover -html=coverage.out -o coverage.html
+      - name: 上传覆盖率报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: |
+            coverage.out
+            coverage.txt
+            coverage.html
+          if-no-files-found: warn
+
   report:
     name: 报告
     runs-on: ubuntu-latest
     needs: [frontend, backend]
+    # 前序 job 失败也出报告，方便定位问题
+    if: always()
     steps:
-      - uses: actions/upload-artifact@v7
+      - name: 下载产物体积清单
+        uses: actions/download-artifact@v7
+        # 前端失败时 artifact 不存在，报告降级生成而不是整体失败
+        continue-on-error: true
+        with:
+          name: frontend-dist-size
+          path: report
+      - name: 下载覆盖率报告
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: backend-coverage
+          path: report
+      - name: 生成汇总报告
+        run: |
+          mkdir -p report
+          {
+            echo "# CI 报告"
+            echo
+            echo "- 提交：\`${{ gitea.sha }}\`"
+            echo
+            echo "## 前端构建产物体积"
+            echo
+            if [ -f report/dist-size.txt ]; then
+              echo '```text'
+              cat report/dist-size.txt
+              echo '```'
+            else
+              echo "未获取到产物体积清单（前端 job 未完成构建）。"
+            fi
+            echo
+            echo "## 后端测试覆盖率"
+            echo
+            if [ -f report/coverage.txt ]; then
+              echo '```text'
+              cat report/coverage.txt
+              echo '```'
+              echo
+              echo "逐行覆盖率见附件 \`coverage.html\`。"
+            else
+              echo "未获取到覆盖率报告（后端测试未通过编译或提前失败）。"
+            fi
+          } > report/summary.md
+      - name: 上传报告
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-report
+          path: report
+          if-no-files-found: error

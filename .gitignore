@@ -9,3 +9,8 @@ data/
 
 # 本地配置（含密钥，不入库）
 /conf/app.ini
+
+# go test -coverprofile 生成的覆盖率报告
+coverage.out
+coverage.txt
+coverage.html
