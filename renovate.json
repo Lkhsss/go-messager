@@ -1,0 +1,54 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended"
+    ],
+    "packageRules": [
+        {
+            "description": "Go 指令默认不自动 bump，保持手动控制",
+            "matchManagers": [
+                "gomod"
+            ],
+            "matchDepNames": [
+                "go"
+            ],
+            "matchDepTypes": [
+                "golang"
+            ],
+            "enabled": false
+        },
+        {
+            "description": "仅提议与当前 go 指令兼容的依赖更新",
+            "matchManagers": [
+                "gomod"
+            ],
+            "constraintsFiltering": "strict"
+        },
+        {
+            "description": "Go 依赖的 minor/patch 更新在 CI 通过后自动合并",
+            "matchManagers": [
+                "gomod"
+            ],
+            "matchUpdateTypes": [
+                "minor",
+                "patch"
+            ],
+            "automerge": true,
+            "automergeType": "pr",
+            "platformAutomerge": true
+        },
+        {
+            "description": "Go 依赖的 major 更新保持人工审核",
+            "matchManagers": [
+                "gomod"
+            ],
+            "matchUpdateTypes": [
+                "major"
+            ],
+            "automerge": false
+        }
+    ],
+    "postUpdateOptions": [
+        "gomodTidy"
+    ]
+}
