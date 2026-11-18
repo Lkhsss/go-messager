@@ -5,7 +5,7 @@ import { createPinia } from "pinia";
 
 import App from "./App.vue";
 import router from "./router";
-import { AUTH_EXPIRED_EVENT } from "@/api/authStorage";
+import { AUTH_EXPIRED_EVENT, AUTH_REFRESHED_EVENT, AUTH_STORAGE_KEY } from "@/api/authStorage";
 import { MAINTENANCE_EVENT } from "@/api/http";
 import { useAuthStore } from "@/stores/auth";
 import { useSystemStore } from "@/stores/system";
@@ -28,6 +28,18 @@ window.addEventListener(AUTH_EXPIRED_EVENT, () => {
   if (system.isPublic && !current.meta.requiresAuth) return;
 
   void router.replace({ name: "login", query: { redirect: current.fullPath } });
+});
+
+// token 续期：同步 Pinia 中的登录态。
+window.addEventListener(AUTH_REFRESHED_EVENT, () => {
+  useAuthStore().sync();
+});
+
+// 其他标签页续期或退出后同步，避免继续使用旧 token。
+window.addEventListener("storage", (event) => {
+  if (event.key === AUTH_STORAGE_KEY) {
+    useAuthStore().sync();
+  }
 });
 
 // 维护模式：刷新站点状态并切到维护页，管理员不受影响。

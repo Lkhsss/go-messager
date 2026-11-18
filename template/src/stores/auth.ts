@@ -41,7 +41,8 @@ export const useAuthStore = defineStore("auth", () => {
     token.value = next?.token ?? null;
     user.value = next?.user ?? null;
     expiresAt.value = next?.expiresAt ?? "";
-    if (next === null) {
+    // 退出、换号或滑动续期换发 token 后都需要重新校验。
+    if (next === null || next.token !== validatedToken) {
       validatedToken = null;
     }
   }

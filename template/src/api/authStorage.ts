@@ -24,8 +24,14 @@ export interface StoredAuth {
 // token 失效时派发的事件，由 main.ts 监听后跳转登录页
 export const AUTH_EXPIRED_EVENT = "go-messager:auth-expired";
 
+// token 续期后派发的事件，让 Pinia 同步新的过期时间
+export const AUTH_REFRESHED_EVENT = "go-messager:auth-refreshed";
+
 // token 体系使用带版本的新 key，旧版只存用户名的登录态不再兼容
-const STORAGE_KEY = "go-messager:auth:v2";
+// 导出给 storage 事件监听与请求 token 比对使用
+export const AUTH_STORAGE_KEY = "go-messager:auth:v2";
+
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 
 // 清理旧版只存用户名的 key。
 const LEGACY_STORAGE_KEY = "go-messager:user";
@@ -89,6 +95,13 @@ export function writeAuth(auth: StoredAuth): void {
   } catch {
     // localStorage 不可用时忽略，仅保留内存中的登录态
   }
+}
+
+// 续期时只更新 token 与过期时间，保留用户资料。
+export function updateAuthToken(token: string, expiresAt: string): void {
+  const current = readAuth();
+  if (!current) return;
+  writeAuth({ token, expiresAt, user: current.user });
 }
 
 export function clearAuth(): void {

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -21,50 +22,92 @@ type authFailure struct {
 }
 
 // authenticate 解析 token 并从数据库加载用户（角色以库为准）。
-func (d *Data) authenticate(c *gin.Context) (User, *authFailure) {
+// 同时返回 claims，供滑动续期判断剩余有效期。
+func (d *Data) authenticate(c *gin.Context) (User, *Claims, *authFailure) {
 	raw, ok := bearerToken(c.GetHeader("Authorization"))
 	if !ok {
-		return User{}, &authFailure{status: http.StatusUnauthorized, code: "UNAUTHORIZED", message: "请先登录"}
+		return User{}, nil, &authFailure{status: http.StatusUnauthorized, code: "UNAUTHORIZED", message: "请先登录"}
 	}
 
 	claims, err := d.parseToken(raw)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return User{}, &authFailure{status: http.StatusUnauthorized, code: "TOKEN_EXPIRED", message: "登录已过期，请重新登录"}
+			return User{}, nil, &authFailure{status: http.StatusUnauthorized, code: "TOKEN_EXPIRED", message: "登录已过期，请重新登录"}
 		}
-		return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+		return User{}, nil, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
 	}
 
 	id, err := userIDFromClaims(claims)
 	if err != nil {
-		return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+		return User{}, nil, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
 	}
 
 	user, err := d.GetUserByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return User{}, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
+			return User{}, nil, &authFailure{status: http.StatusUnauthorized, code: "INVALID_TOKEN", message: "登录状态无效，请重新登录"}
 		}
-		return User{}, &authFailure{status: http.StatusInternalServerError, code: "QUERY_FAILED", message: err.Error()}
+		return User{}, nil, &authFailure{status: http.StatusInternalServerError, code: "QUERY_FAILED", message: err.Error()}
 	}
 
 	if user.Role == RoleNone {
-		return User{}, &authFailure{status: http.StatusForbidden, code: "ACCOUNT_DISABLED", message: "账号已被停用"}
+		return User{}, nil, &authFailure{status: http.StatusForbidden, code: "ACCOUNT_DISABLED", message: "账号已被停用"}
 	}
 
-	return user, nil
+	return user, claims, nil
+}
+
+// 续期响应头：前端读到后替换本地 token 与过期时间。
+const (
+	headerAuthToken     = "X-Auth-Token"
+	headerAuthExpiresAt = "X-Auth-Expires-At"
+)
+
+// renewWindow 滑动续期阈值：TTL/4，限制在 30s-12h 之间且不超过 TTL/2。
+func (d *Data) renewWindow() time.Duration {
+	window := d.JWTTTL / 4
+	if window < 30*time.Second {
+		window = 30 * time.Second
+	}
+	if window > 12*time.Hour {
+		window = 12 * time.Hour
+	}
+	if half := d.JWTTTL / 2; window > half {
+		window = half
+	}
+	return window
+}
+
+// maybeRenewToken 剩余有效期不足时换发新 token，通过响应头下发。
+// 续期失败静默忽略：本次请求继续用旧 token，到期后前端照常跳登录页。
+func (d *Data) maybeRenewToken(c *gin.Context, user User, claims *Claims) {
+	if claims == nil || claims.ExpiresAt == nil {
+		return
+	}
+	if time.Until(claims.ExpiresAt.Time) > d.renewWindow() {
+		return
+	}
+
+	token, expiresAt, err := d.issueToken(user)
+	if err != nil {
+		return
+	}
+
+	c.Header(headerAuthToken, token)
+	c.Header(headerAuthExpiresAt, expiresAt.UTC().Format(time.RFC3339))
 }
 
 // AuthRequired 校验 token，未登录或登录失效时中断请求。
 func (d *Data) AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user, failure := d.authenticate(c)
+		user, claims, failure := d.authenticate(c)
 		if failure != nil {
 			Response{}.Fail(c, failure.status, failure.code, failure.message)
 			c.Abort()
 			return
 		}
 
+		d.maybeRenewToken(c, user, claims)
 		c.Set(ctxUserKey, user)
 		c.Next()
 	}
@@ -74,7 +117,8 @@ func (d *Data) AuthRequired() gin.HandlerFunc {
 // 仅用于公开模式下的只读接口；写接口仍由 AuthRequired 兜底。
 func (d *Data) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if user, failure := d.authenticate(c); failure == nil {
+		if user, claims, failure := d.authenticate(c); failure == nil {
+			d.maybeRenewToken(c, user, claims)
 			c.Set(ctxUserKey, user)
 		}
 		c.Next()

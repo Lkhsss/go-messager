@@ -102,6 +102,14 @@ func newTestEnvWithConfig(t *testing.T, mutate func(*Config)) *testEnv {
 func (e *testEnv) do(t *testing.T, method, path, token string, body any) (int, apiResponse) {
 	t.Helper()
 
+	code, _, resp := e.doRecorder(t, method, path, token, body)
+	return code, resp
+}
+
+// doRecorder 与 do 相同，额外返回响应头，供续期等按 header 返回数据的接口使用。
+func (e *testEnv) doRecorder(t *testing.T, method, path, token string, body any) (int, http.Header, apiResponse) {
+	t.Helper()
+
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -127,7 +135,7 @@ func (e *testEnv) do(t *testing.T, method, path, token string, body any) (int, a
 		t.Fatalf("解析响应失败[%d %s]：%v", w.Code, w.Body.String(), err)
 	}
 
-	return w.Code, resp
+	return w.Code, w.Header(), resp
 }
 
 func (e *testEnv) register(t *testing.T, name, password string) AuthResult {

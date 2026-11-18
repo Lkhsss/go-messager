@@ -1,4 +1,4 @@
-# Go Messager v0.11.1
+# Go Messager v0.12.0
 
 [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 [![CI TEST](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/ci.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=ci.yml)
@@ -42,7 +42,7 @@ Copy-Item conf/app.min.ini conf/app.ini
 | `access.mode`     | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
 | `database.path`   | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
 | `jwt.secret`      | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
-| `jwt.ttl`         | `24h`            | `JWT_TTL` 环境变量优先                                                      |
+| `jwt.ttl`         | `24h`            | 不活跃容忍时长，活跃访问自动续期；`JWT_TTL` 环境变量优先                    |
 | `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
 | `register.enabled` | `true`          | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                     |
 | `limits.post_per_minute` | `5`        | 所有用户每分钟最多发文数                                                    |
@@ -73,6 +73,13 @@ Copy-Item conf/app.min.ini conf/app.ini
 - 不使用 `WithMinLength`：该选项在 `gin-contrib/gzip v1.2.9` 中会让 `c.Data` 的小响应出现「声明 gzip、body 明文」，浏览器解码失败。
 
 压缩级别与排除规则在 `middleware.go` 的 `gzipCompression()` 中调整。
+
+## 登录有效期与滑动续期
+
+`jwt.ttl` 表示「连续多久不访问才掉线」，不是登录后的绝对有效期：认证通过且剩余有效期不足 `ttl/4`（最多 12 小时，最少 30 秒）时，服务端会换发新 token，并通过响应头 `X-Auth-Token`、`X-Auth-Expires-At` 下发，前端自动替换本地登录态。因此只要在 `ttl` 内访问过站点，登录状态就会顺延。
+
+- 想要「7 天不来才掉线」，把 `jwt.ttl` 设为 `168h` 即可，无需其他配置。
+- 旧 token 在自身过期前仍然有效；如需改密/停用后立即失效，需要额外的 token 版本号机制（当前未实现）。
 
 JWT 相关环境变量优先级高于配置文件。Docker 镜像用 `conf/app.min.ini` 生成 `/conf/app.ini`，数据库位于 `/data/data.db`，持久化挂载 `/data`。需要自定义配置时挂载 `/conf/app.ini`。
 
