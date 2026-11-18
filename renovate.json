@@ -1,54 +1,75 @@
 {
-    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": [
-        "config:recommended"
-    ],
-    "packageRules": [
-        {
-            "description": "Go 指令默认不自动 bump，保持手动控制",
-            "matchManagers": [
-                "gomod"
-            ],
-            "matchDepNames": [
-                "go"
-            ],
-            "matchDepTypes": [
-                "golang"
-            ],
-            "enabled": false
-        },
-        {
-            "description": "仅提议与当前 go 指令兼容的依赖更新",
-            "matchManagers": [
-                "gomod"
-            ],
-            "constraintsFiltering": "strict"
-        },
-        {
-            "description": "Go 依赖的 minor/patch 更新在 CI 通过后自动合并",
-            "matchManagers": [
-                "gomod"
-            ],
-            "matchUpdateTypes": [
-                "minor",
-                "patch"
-            ],
-            "automerge": true,
-            "automergeType": "pr",
-            "platformAutomerge": true
-        },
-        {
-            "description": "Go 依赖的 major 更新保持人工审核",
-            "matchManagers": [
-                "gomod"
-            ],
-            "matchUpdateTypes": [
-                "major"
-            ],
-            "automerge": false
-        }
-    ],
-    "postUpdateOptions": [
-        "gomodTidy"
-    ]
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Go 指令默认不自动 bump，保持手动控制",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "enabled": false
+    },
+    {
+      "description": "仅提议与当前 go 指令兼容的依赖更新",
+      "matchManagers": ["gomod"],
+      "constraintsFiltering": "strict"
+    },
+    {
+      "description": "Go 依赖 minor/patch 自动合并，major 人工审核",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Go 依赖 major 更新保持人工审核",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "前端（pnpm）：仅匹配 template/ 目录下的依赖更新",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["template/**"],
+      "matchUpdateTypes": ["patch"],
+      "matchCurrentVersion": "!/^0\\./",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "前端（pnpm）：非 0.x 的 minor 更新自动合并",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["template/**"],
+      "matchUpdateTypes": ["minor"],
+      "matchCurrentVersion": "!/^0\\./",
+      "automerge": true
+    },
+    {
+      "description": "前端（pnpm）：0.x 依赖保持人工审核",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["template/**"],
+      "matchCurrentVersion": "/^0\\./",
+      "automerge": false
+    },
+    {
+      "description": "前端（pnpm）：核心框架单独分组，集中 review",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["template/**"],
+      "matchPackageNames": ["react", "react-dom", "vue"],
+      "groupName": "frontend framework core"
+    },
+    {
+      "description": "前端（pnpm）：devDependencies 统一分组，减少 PR 数量",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["template/**"],
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "frontend devDependencies"
+    }
+  ],
+  "postUpdateOptions": ["gomodTidy", "pnpmDedupe"],
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 10,
+  "schedule": ["after 10pm every weekday", "before 5am every weekday"]
 }
