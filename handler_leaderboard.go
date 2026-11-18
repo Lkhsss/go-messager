@@ -127,7 +127,7 @@ func (d *Data) leaderboardEntries(rows []leaderboardRow) ([]LeaderboardEntry, er
 		"id", "created_at", "updated_at", "user", "title", "subtitle", "excerpt",
 		"is_private", "parent_id", "root_id", "like_count", "dislike_count",
 		"question_count", "emoji_counts",
-	).Preload("Tags").Where("id IN ?", ids).Find(&posts).Error; err != nil {
+	).Preload("Tags", "reviewed = ?", true).Where("id IN ?", ids).Find(&posts).Error; err != nil {
 		return nil, err
 	}
 

@@ -69,6 +69,11 @@ func main() {
 		panic(err)
 	}
 
+	// 老版本标签默认已审核，只执行一次。
+	if err := migrateTagReview(db); err != nil {
+		panic(err)
+	}
+
 	// 启动时校准计数。
 	if err := syncTagUsageCounts(db); err != nil {
 		panic(err)
@@ -97,7 +102,7 @@ func main() {
 	}
 
 	addr := cfg.ListenAddr()
-	log.Printf("监听地址：%s", addr)
+	log.Printf("监听地址：http://%s", addr)
 	if err := r.Run(addr); err != nil {
 		panic(err)
 	}

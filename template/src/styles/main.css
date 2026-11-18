@@ -79,6 +79,19 @@
   text-underline-offset: 2px;
 }
 
+/* 正文 #标签 药丸：inline 布局不撑高行盒，左右留出间隙，上下不改变布局。 */
+.markdown-body .tag-pill {
+  display: inline;
+  white-space: nowrap;
+  margin: 0 0.15em;
+  padding: 0 0.4em;
+  border: 1px solid;
+  border-radius: 0.5rem;
+  font-size: 0.9em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .markdown-body img {
   max-width: 100%;
   height: auto;

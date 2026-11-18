@@ -15,9 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// 每篇文章最多标签数。
+// 正文与标题长度上限。
 const (
-	maxTagsPerPost       = 5
 	maxPostBodyRunes     = 100000
 	maxPostTitleRunes    = 120
 	maxPostSubtitleRunes = 200
@@ -201,12 +200,8 @@ func (d *Data) NewPost(c *gin.Context) {
 		}
 	}
 
-	// 去重后再判断数量。
+	// 标签去重；手选数量不设上限。
 	tagIDs := uniqueIDs(req.TagIDs)
-	if len(tagIDs) > maxTagsPerPost {
-		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
-		return
-	}
 
 	tags := []Tag{}
 	if len(tagIDs) > 0 {
@@ -231,23 +226,37 @@ func (d *Data) NewPost(c *gin.Context) {
 		Tags:      tags,
 	}
 
+	// 正文中的 #标签 自动关联；新标签先进入待审核状态。
+	bodyTagNames := extractBodyTags(req.Body)
+
 	// 文章和标签计数放在同一事务。
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		autoTags, err := d.resolveBodyTags(tx, bodyTagNames)
+		if err != nil {
+			return err
+		}
+		post.Tags = mergeTags(tags, autoTags)
+
 		if err := tx.Create(&post).Error; err != nil {
 			return err
 		}
-		if len(tagIDs) == 0 {
+
+		ids := tagIDsOf(post.Tags)
+		if len(ids) == 0 {
 			return nil
 		}
 
 		return tx.Model(&Tag{}).
-			Where("id IN ?", tagIDs).
+			Where("id IN ?", ids).
 			UpdateColumn("usage_count", gorm.Expr("usage_count + 1")).Error
 	})
 	if err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
 	}
+
+	// 未审核标签不出现在文章下方标签区。
+	post.Tags = filterReviewedTags(post.Tags)
 
 	post.UserAvatarVersion = avatarVersion(user.Avatar)
 	post.UserLevel, _, _ = levelFromExp(user.Exp)
@@ -327,7 +336,7 @@ func (d *Data) SetPostPrivate(c *gin.Context) {
 	}
 
 	var post Post
-	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {
+	if err := d.DB.Preload("Tags", "reviewed = ?", true).Take(&post, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
 			return
@@ -404,10 +413,6 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	}
 
 	tagIDs := uniqueIDs(req.TagIDs)
-	if len(tagIDs) > maxTagsPerPost {
-		Response{}.Fail(c, http.StatusBadRequest, "TOO_MANY_TAGS", "每篇文章最多选择 5 个标签")
-		return
-	}
 
 	var post Post
 	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {
@@ -442,6 +447,10 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	excerpt := buildExcerpt(req.Body)
 	charCount := countTextCharacters(req.Title, req.Subtitle, req.Body)
 
+	// 正文中的 #标签 自动关联；新标签先进入待审核状态。
+	bodyTagNames := extractBodyTags(req.Body)
+	mergedTags := tags
+
 	// 更新字段和标签，校准使用次数。
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&post).Updates(map[string]any{
@@ -454,7 +463,12 @@ func (d *Data) UpdatePost(c *gin.Context) {
 		}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&post).Association("Tags").Replace(tags); err != nil {
+		autoTags, err := d.resolveBodyTags(tx, bodyTagNames)
+		if err != nil {
+			return err
+		}
+		mergedTags = mergeTags(tags, autoTags)
+		if err := tx.Model(&post).Association("Tags").Replace(mergedTags); err != nil {
 			return err
 		}
 		return syncTagUsageCounts(tx)
@@ -470,7 +484,8 @@ func (d *Data) UpdatePost(c *gin.Context) {
 	post.Excerpt = excerpt
 	post.CharCount = charCount
 	post.BodyHash = bodyHash
-	post.Tags = tags
+	// 未审核标签不出现在文章下方标签区。
+	post.Tags = filterReviewedTags(mergedTags)
 
 	result := []Post{post}
 	d.fillPostAvatars(result)
@@ -727,7 +742,7 @@ func (d *Data) GetPostByID(c *gin.Context) {
 	user, _ := CurrentUser(c)
 
 	var post Post
-	if err := d.DB.Preload("Tags").Take(&post, id).Error; err != nil {
+	if err := d.DB.Preload("Tags", "reviewed = ?", true).Take(&post, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			Response{}.Fail(c, http.StatusNotFound, "POST_NOT_FOUND", "文章不存在")
 			return
@@ -780,7 +795,7 @@ func (d *Data) listPosts(c *gin.Context, filter func(*gorm.DB) *gorm.DB) {
 	var posts []Post
 	if err := base().
 		Select("id", "created_at", "updated_at", "deleted_at", "user", "title", "subtitle", "excerpt", "is_private", "parent_id", "root_id", "like_count", "dislike_count", "question_count", "emoji_counts", "char_count").
-		Preload("Tags").
+		Preload("Tags", "reviewed = ?", true).
 		Order("id DESC").
 		Limit(perPage).
 		Offset((page - 1) * perPage).
@@ -907,12 +922,10 @@ func uniqueIDs(ids []uint) []uint {
 	return result
 }
 
-// ensurePostTags 让 tags 序列化为 []。
+// ensurePostTags 只保留已审核标签，并保证序列化为 []。
 func ensurePostTags(posts []Post) {
 	for i := range posts {
-		if posts[i].Tags == nil {
-			posts[i].Tags = []Tag{}
-		}
+		posts[i].Tags = filterReviewedTags(posts[i].Tags)
 	}
 }
 

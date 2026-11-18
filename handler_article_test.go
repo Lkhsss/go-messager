@@ -108,13 +108,14 @@ func TestUpdatePost(t *testing.T) {
 	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_TAGS" {
 		t.Fatalf("不存在的标签应 400 INVALID_TAGS，实际 %d：%s", code, describe(resp))
 	}
-	tagIDs := make([]uint, 0, maxTagsPerPost+1)
-	for i := 0; i < maxTagsPerPost+1; i++ {
+	// 标签数量不设上限：6 个标签也应保存成功。
+	tagIDs := make([]uint, 0, 6)
+	for i := 0; i < 6; i++ {
 		tagIDs = append(tagIDs, env.createTag(t, admin.Token, "Limit"+strings.Repeat("x", i)).ID)
 	}
 	code, resp = env.do(t, http.MethodPut, path, alice.Token, PostInput{Title: "x", Body: "x", TagIDs: tagIDs})
-	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "TOO_MANY_TAGS" {
-		t.Fatalf("超过 5 个标签应 400 TOO_MANY_TAGS，实际 %d：%s", code, describe(resp))
+	if code != http.StatusOK {
+		t.Fatalf("标签数量不设上限，6 个标签应 200，实际 %d：%s", code, describe(resp))
 	}
 
 	// 作者正常编辑：字段和标签都更新

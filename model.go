@@ -178,12 +178,14 @@ type ReactionResult struct {
 	XP *XPGain `json:"xp,omitempty"`
 }
 
-// Tag 标签，仅管理员可创建。
+// Tag 标签。管理员手动创建，或从正文 #标签 自动提取。
 type Tag struct {
 	gorm.Model
 	Name string `gorm:"uniqueIndex" form:"name" json:"name" binding:"required"`
 	// #rrggbb，空值使用前端默认色。
 	Color string `gorm:"size:7" json:"color"`
+	// Reviewed 是否已审核：未审核标签不进入首页筛选与文章下方标签区。
+	Reviewed bool `gorm:"not null;default:false;index" json:"reviewed"`
 	// 未删除文章的使用次数。
 	UsageCount int64  `gorm:"not null;default:0" json:"usage_count"`
 	Posts      []Post `gorm:"many2many:post_tags;" json:"posts,omitempty"`
@@ -194,12 +196,17 @@ type TagInput struct {
 	Color string `json:"color"` // 可选，#RGB / #RRGGBB，可省略 #
 }
 
+// TagReviewInput 审核标签。
+type TagReviewInput struct {
+	Reviewed *bool `json:"reviewed"`
+}
+
 // PostInput 文章请求体，作者由 token 决定。
 type PostInput struct {
 	Title    string `json:"title" binding:"required"`
 	Subtitle string `json:"subtitle"`
 	Body     string `json:"body" binding:"required"`
-	// 最多 maxTagsPerPost 个。
+	// 手选标签，不限数量，重复 ID 自动去重；正文中的 #标签 由服务端自动关联。
 	TagIDs []uint `json:"tag_ids"`
 }
 

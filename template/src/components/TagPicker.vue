@@ -25,7 +25,8 @@ const props = withDefaults(
     includeIds: () => [],
     excludeIds: () => [],
     selectedIds: () => [],
-    maxSelect: 5,
+    // 0 表示不限制数量。
+    maxSelect: 0,
     knownTags: () => [],
   },
 )
@@ -105,7 +106,9 @@ const displayTags = computed(() => {
   return [...sourceTags.value, ...extras]
 })
 
-const maxReached = computed(() => props.mode === 'select' && props.selectedIds.length >= props.maxSelect)
+const maxReached = computed(
+  () => props.mode === 'select' && props.maxSelect > 0 && props.selectedIds.length >= props.maxSelect,
+)
 const isOpen = computed(() => expanded.value || Boolean(keyword.value.trim()))
 
 type ChipState = 'neutral' | 'include' | 'exclude' | 'selected'
@@ -203,7 +206,7 @@ onBeforeUnmount(() => {
       </button>
 
       <span class="text-xs text-base-content/50">
-        {{ mode === 'select' ? `已选 ${selectedIds.length}/${maxSelect}` : '点击=包含，再点=排除，再点=默认' }}
+        {{ mode === 'select' ? (maxSelect > 0 ? `已选 ${selectedIds.length}/${maxSelect}` : `已选 ${selectedIds.length}`) : '点击=包含，再点=排除，再点=默认' }}
       </span>
     </div>
 

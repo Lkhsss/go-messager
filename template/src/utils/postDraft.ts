@@ -101,6 +101,7 @@ function normalizeTags(value: unknown): TagItem[] {
       DeletedAt: typeof candidate.DeletedAt === "string" ? candidate.DeletedAt : null,
       name: candidate.name,
       color: typeof candidate.color === "string" ? candidate.color : "",
+      reviewed: candidate.reviewed === true,
       usage_count: typeof candidate.usage_count === "number" ? candidate.usage_count : 0,
     });
   }

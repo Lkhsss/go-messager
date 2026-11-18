@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { createTag, deleteTag, fetchTags, updateTag, type TagItem } from '@/api/tag'
+import { computed, onMounted, ref } from 'vue'
+import { createTag, deleteTag, fetchAdminTags, reviewTag, updateTag, type TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
 import { tagBadgeStyle } from '@/utils/tagColor'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
@@ -14,6 +14,9 @@ const name = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
+// 审核状态筛选与进行中的标签 ID。
+const tagFilter = ref<'all' | 'pending'>('all')
+const reviewingId = ref<number | null>(null)
 
 // 颜色可选：不勾选「自定义颜色」就用默认高级灰
 const useCustomColor = ref(false)
@@ -41,16 +44,44 @@ function resetColor() {
 }
 
 function sortTags(list: TagItem[]): TagItem[] {
-  return [...list].sort((a, b) => a.name.localeCompare(b.name))
+  return [...list].sort((a, b) => {
+    if (a.reviewed !== b.reviewed) return a.reviewed ? 1 : -1
+    return a.name.localeCompare(b.name)
+  })
 }
 
 function isValidColor(raw: string): boolean {
   return !raw || hexColorPattern.test(raw)
 }
 
+const pendingCount = computed(() => tags.value.filter((tag) => !tag.reviewed).length)
+const visibleTags = computed(() =>
+  tagFilter.value === 'pending' ? tags.value.filter((tag) => !tag.reviewed) : tags.value,
+)
+
+// 审核 / 取消审核。
+async function toggleReview(tag: TagItem) {
+  if (reviewingId.value !== null) return
+
+  reviewingId.value = tag.ID
+  errorMsg.value = ''
+  successMsg.value = ''
+  try {
+    const updated = await reviewTag(tag.ID, !tag.reviewed)
+    tags.value = sortTags(tags.value.map((item) => (item.ID === updated.ID ? updated : item)))
+    successMsg.value = updated.reviewed
+      ? `标签「${updated.name}」已审核通过`
+      : `标签「${updated.name}」已取消审核`
+  } catch (err) {
+    errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+  } finally {
+    reviewingId.value = null
+  }
+}
+
 async function loadTags() {
   try {
-    tags.value = await fetchTags()
+    tags.value = await fetchAdminTags()
   } catch {
     // 列表加载失败不阻塞创建
   }
@@ -234,7 +265,9 @@ onMounted(() => {
       <div class="card-body gap-4">
         <div>
           <h2 class="card-title text-lg">标签管理</h2>
-          <p class="mt-1 text-sm text-base-content/60">标签只有管理员能创建、编辑和删除，发帖时每人最多选择 5 个。</p>
+          <p class="mt-1 text-sm text-base-content/60">
+            标签由管理员创建，或从正文的 #标签 自动提取。未审核标签不参与首页筛选和文章标签区。
+          </p>
         </div>
 
         <form class="space-y-3" novalidate @submit.prevent="onSubmit">
@@ -282,14 +315,32 @@ onMounted(() => {
         </div>
 
         <div>
-          <h3 class="mb-2 text-sm font-medium">已有标签（{{ tags.length }}）</h3>
-          <div v-if="tags.length === 0" class="text-sm text-base-content/60">还没有标签</div>
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-medium">
+              已有标签（{{ tags.length }}）
+              <span v-if="pendingCount > 0" class="badge badge-warning badge-sm">待审核 {{ pendingCount }}</span>
+            </h3>
+            <div class="join">
+              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': tagFilter === 'all' }"
+                @click="tagFilter = 'all'">全部</button>
+              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': tagFilter === 'pending' }"
+                @click="tagFilter = 'pending'">待审核</button>
+            </div>
+          </div>
+          <div v-if="visibleTags.length === 0" class="text-sm text-base-content/60">
+            {{ tagFilter === 'pending' ? '没有待审核的标签' : '还没有标签' }}
+          </div>
           <div v-else class="space-y-2">
-            <div v-for="tag in tags" :key="tag.ID"
+            <div v-for="tag in visibleTags" :key="tag.ID"
               class="flex flex-wrap items-center gap-2 rounded-box border border-base-200 px-3 py-2">
               <span class="badge" :style="tagBadgeStyle(tag)">#{{ tag.name }}</span>
               <span class="text-xs text-base-content/50">{{ tag.usage_count }} 篇文章</span>
+              <span v-if="!tag.reviewed" class="badge badge-warning badge-sm">待审核</span>
               <div class="ml-auto flex items-center gap-1">
+                <button type="button" class="btn btn-ghost btn-xs"
+                  :disabled="reviewingId !== null || deleting || editSaving" @click="toggleReview(tag)">
+                  {{ reviewingId === tag.ID ? '处理中…' : tag.reviewed ? '取消审核' : '审核通过' }}
+                </button>
                 <button type="button" class="btn btn-ghost btn-xs" :disabled="deleting || editSaving"
                   @click="openEdit(tag)">
                   编辑

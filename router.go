@@ -64,6 +64,10 @@ func api(r *gin.Engine, db *gorm.DB, cfg *Config) (*Data, error) {
 	admin.PUT("/tag/:id", data.UpdateTag)
 	admin.DELETE("/tag/:id", data.DeleteTag)
 
+	// 标签审核：列表包含未审核标签，可反复通过/取消。
+	admin.GET("/admin/tags", data.GetAdminTags)
+	admin.PATCH("/admin/tags/:id/review", data.ReviewTag)
+
 	admin.GET("/admin/users", data.GetAdminUsers)
 	admin.GET("/admin/users/:id", data.GetAdminUserDetail)
 	admin.PATCH("/admin/users/:id/status", data.SetAdminUserStatus)

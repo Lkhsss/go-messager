@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createPost, fetchPost, updatePost } from '@/api/post'
 import TagPicker from '@/components/TagPicker.vue'
-import type { TagItem } from '@/api/tag'
+import { fetchTags, type TagItem } from '@/api/tag'
 import { isApiError } from '@/api/http'
-import { renderMarkdown } from '@/utils/markdown'
+import { extractBodyTags, renderMarkdown } from '@/utils/markdown'
+import { tagBadgeStyle } from '@/utils/tagColor'
 import { clearPostDraft, readPostDraft, savePostDraft } from '@/utils/postDraft'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 
-// 与后端 maxTagsPerPost 保持一致
-const MAX_TAGS = 5
+// 正文自动标签解析防抖
+const AUTO_TAG_DELAY_MS = 250
 // 与后端 maxPostBodyRunes 保持一致
 const MAX_BODY = 100000
 // 停止输入后多久静默落盘草稿
@@ -31,6 +32,12 @@ const isEdit = computed(() => route.name === 'post-edit')
 
 const selectedIds = ref<number[]>([])
 const knownTags = ref<TagItem[]>([])
+// 已审核标签，用于自动标签取色与审核状态判断。
+const allReviewedTags = ref<TagItem[]>([])
+// 正文实时解析出的标签名。
+const autoTagNames = ref<string[]>([])
+const bodyTextarea = ref<HTMLTextAreaElement | null>(null)
+let autoTagTimer: number | undefined
 const submitting = ref(false)
 const loadingPost = ref(false)
 const loadError = ref('')
@@ -44,8 +51,52 @@ const form = reactive({
 
 // 编辑 / 预览切换；提交的仍然是 Markdown 原文
 const showPreview = ref(false)
-const previewHtml = computed(() => renderMarkdown(form.body))
+const previewHtml = computed(() => renderMarkdown(form.body, allReviewedTags.value))
 const bodyLength = computed(() => Array.from(form.body).length)
+
+// 已审核标签映射，供正文自动标签取色。
+const reviewedTagByName = computed(() => {
+  const map = new Map<string, TagItem>()
+  for (const tag of allReviewedTags.value) map.set(tag.name, tag)
+  return map
+})
+
+// 手选标签名集合，自动识别结果不重复展示。
+const selectedTagNames = computed(() => new Set(draftTags().map((tag) => tag.name)))
+
+// 正文自动识别的标签；tag 为空表示待审核或新标签。
+const autoTagItems = computed(() =>
+  autoTagNames.value
+    .filter((name) => !selectedTagNames.value.has(name))
+    .map((name) => ({ name, tag: reviewedTagByName.value.get(name) })),
+)
+
+function refreshAutoTags() {
+  autoTagNames.value = extractBodyTags(form.body)
+}
+
+// 点击自动标签，定位到正文中首次出现的位置。
+function locateAutoTag(name: string) {
+  const textarea = bodyTextarea.value
+  if (!textarea) return
+  const needle = `#${name}`
+  const index = form.body.indexOf(needle)
+  if (index < 0) return
+
+  showPreview.value = false
+  void nextTick(() => {
+    textarea.focus()
+    textarea.setSelectionRange(index, index + needle.length)
+  })
+}
+
+async function loadReviewedTags() {
+  try {
+    allReviewedTags.value = await fetchTags({ sort: 'name' })
+  } catch {
+    allReviewedTags.value = []
+  }
+}
 
 // 草稿状态：draftExists 控制「清除草稿」按钮，draftRestored 控制恢复提示。
 const draftExists = ref(false)
@@ -183,10 +234,6 @@ function toggleTag(tag: TagItem) {
     errorMsg.value = ''
     return
   }
-  if (selectedIds.value.length >= MAX_TAGS) {
-    errorMsg.value = `最多选择 ${MAX_TAGS} 个标签`
-    return
-  }
   // 记住标签快照，草稿保存和恢复时都能取到完整信息。
   if (!knownTags.value.some((item) => item.ID === tag.ID)) {
     knownTags.value = [...knownTags.value, tag]
@@ -231,6 +278,7 @@ async function loadPost() {
 }
 
 onMounted(() => {
+  void loadReviewedTags()
   if (isEdit.value) {
     void loadPost()
   } else {
@@ -245,6 +293,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (autoTagTimer !== undefined) window.clearTimeout(autoTagTimer)
   window.removeEventListener('pagehide', flushDraft)
   window.removeEventListener('beforeunload', flushDraft)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -253,6 +302,19 @@ onBeforeUnmount(() => {
 
 // 输入或标签变化后静默保存。
 watch([() => form.title, () => form.subtitle, () => form.body, selectedIds], scheduleDraftSave)
+
+// 正文变化后防抖解析自动标签。
+watch(
+  () => form.body,
+  () => {
+    if (autoTagTimer !== undefined) window.clearTimeout(autoTagTimer)
+    autoTagTimer = window.setTimeout(() => {
+      autoTagTimer = undefined
+      refreshAutoTags()
+    }, AUTO_TAG_DELAY_MS)
+  },
+  { immediate: true },
+)
 
 async function onSubmit() {
   if (submitting.value) return
@@ -343,7 +405,7 @@ async function onSubmit() {
             </div>
           </div>
 
-          <textarea v-if="!showPreview" v-model="form.body" name="body" rows="12" placeholder="支持 Markdown…"
+          <textarea v-if="!showPreview" ref="bodyTextarea" v-model="form.body" name="body" rows="12" placeholder="支持 Markdown…"
             class="textarea textarea-bordered w-full" :disabled="submitting"></textarea>
 
           <div v-else class="markdown-body min-h-48 rounded-box border border-base-300 bg-base-100 p-3 text-sm">
@@ -361,11 +423,24 @@ async function onSubmit() {
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium">标签</span>
-            <span class="text-xs text-base-content/60">最多 {{ MAX_TAGS }} 个</span>
+            <span class="text-xs text-base-content/60">可多选，点击可取消</span>
           </div>
 
-          <TagPicker mode="select" :selected-ids="selectedIds" :max-select="MAX_TAGS" :known-tags="knownTags"
+          <TagPicker mode="select" :selected-ids="selectedIds" :known-tags="knownTags"
             @toggle="toggleTag" />
+
+          <div v-if="autoTagItems.length > 0" class="space-y-1.5 rounded-box border border-base-200 bg-base-200/30 p-2.5">
+            <p class="text-xs text-base-content/60">正文自动识别（{{ autoTagItems.length }}）</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button v-for="item in autoTagItems" :key="item.name" type="button" class="badge badge-sm cursor-pointer"
+                :style="tagBadgeStyle(item.tag ?? { color: '' })"
+                :title="item.tag ? `被 ${item.tag.usage_count} 篇文章使用` : '标签待审核'"
+                @click="locateAutoTag(item.name)">
+                #{{ item.name }}
+              </button>
+            </div>
+            <p class="text-xs text-base-content/45">正文里的 #标签 会自动加入本文，管理员审核后才会出现在首页筛选。</p>
+          </div>
         </div>
 
         <div v-if="errorMsg" role="alert" class="alert alert-error alert-soft py-2 text-sm">

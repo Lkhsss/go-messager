@@ -292,6 +292,29 @@ func (d *Data) IfTagExist(name string) (bool, error) {
 	return count > 0, nil
 }
 
+// 标签审核迁移标记：写入后不再重复执行。
+const tagReviewMigratedKey = "tag_review_migrated"
+
+// migrateTagReview 升级时把历史标签一次性标记为已审核，避免首页筛选突然变空。
+// 新库首次启动时 tags 为空，只写入标记；之后自动提取的标签仍保持待审核。
+func migrateTagReview(db *gorm.DB) error {
+	var setting Setting
+	err := db.Where("key = ?", tagReviewMigratedKey).Take(&setting).Error
+	switch {
+	case err == nil:
+		return nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return fmt.Errorf("读取标签审核迁移标记失败：%w", err)
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Tag{}).Where("reviewed = ?", false).Update("reviewed", true).Error; err != nil {
+			return err
+		}
+		return tx.Create(&Setting{Key: tagReviewMigratedKey, Value: "1"}).Error
+	})
+}
+
 // syncTagUsageCounts 全量校准标签使用次数，启动时执行。
 func syncTagUsageCounts(db *gorm.DB) error {
 	err := db.Exec(`

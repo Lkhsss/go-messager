@@ -9,6 +9,8 @@ export interface TagItem {
   name: string;
   // #rrggbb，空值用默认色。
   color: string;
+  // 是否已审核：未审核不进入首页筛选与文章下方标签区。
+  reviewed: boolean;
   // 使用次数，后端维护。
   usage_count: number;
 }
@@ -65,5 +67,23 @@ export async function deleteTag(id: number): Promise<void> {
   if (!data.success) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "删除标签失败" };
   }
+}
+
+// 管理端标签列表，包含待审核标签。
+export async function fetchAdminTags(): Promise<TagItem[]> {
+  const { data } = await http.get<ApiResponse<TagItem[]>>("/admin/tags");
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: "获取标签失败" };
+  }
+  return data.data;
+}
+
+// 审核 / 取消审核标签。
+export async function reviewTag(id: number, reviewed: boolean): Promise<TagItem> {
+  const { data } = await http.patch<ApiResponse<TagItem>>(`/admin/tags/${id}/review`, { reviewed });
+  if (!data.success || !data.data) {
+    throw data.error ?? { code: "UNKNOWN_ERROR", message: reviewed ? "审核失败" : "取消审核失败" };
+  }
+  return data.data;
 }
 

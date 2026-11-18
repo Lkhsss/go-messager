@@ -1,4 +1,4 @@
-# Go Messager v0.12.0
+# Go Messager v0.13.0
 
 [![Build Docker](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/Build-Docker.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=Build-Docker.yml)
 [![CI TEST](https://git.lkhssssss.cn/lkhsss/go-messager/actions/workflows/ci.yml/badge.svg)](https://git.lkhssssss.cn/lkhsss/go-messager/actions?workflow=ci.yml)
@@ -34,34 +34,34 @@ Copy-Item conf/app.min.ini conf/app.ini
 
 默认值：
 
-| 配置项            | 默认值           | 说明                                                                        |
-| ----------------- | ---------------- | --------------------------------------------------------------------------- |
-| `server.host`     | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                              |
-| `server.port`     | `8080`           | HTTP 端口                                                                   |
-| `server.mode`     | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先           |
-| `access.mode`     | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
-| `database.path`   | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
-| `jwt.secret`      | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
-| `jwt.ttl`         | `24h`            | 不活跃容忍时长，活跃访问自动续期；`JWT_TTL` 环境变量优先                    |
-| `captcha.enabled` | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
-| `register.enabled` | `true`          | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                     |
-| `limits.post_per_minute` | `5`        | 所有用户每分钟最多发文数                                                    |
-| `limits.comment_per_minute` | `10`    | 所有用户每分钟最多评论数                                                    |
-| `limits.reaction_per_minute` | `30`   | 所有用户每分钟最多互动数                                                    |
-| `limits.new_account_hours` | `24h`     | 新账号判定窗口：注册不足该时长且未可信时使用严格配额                         |
-| `limits.new_account_post_per_day` | `5` | 新账号每天最多发文数                                                      |
-| `limits.new_account_comment_per_day` | `20` | 新账号每天最多评论数                                                  |
-| `limits.post_per_day` | `200`          | 普通用户每天最多发文数                                                      |
-| `limits.comment_per_day` | `500`       | 普通用户每天最多评论数                                                      |
-| `limits.register_per_ip_per_hour` | `10` | 同一 IP 每小时最多成功注册数                                              |
-| `limits.register_per_ip_per_day` | `20` | 同一 IP 每天最多成功注册数                                                |
-| `limits.min_password_bytes` | `8`     | 注册/修改密码的最小字节数                                                   |
-| `limits.min_username_runes` | `2`     | 用户名最小字符数                                                            |
-| `limits.max_username_runes` | `32`    | 用户名最大字符数                                                            |
-| `limits.duplicate_window` | `24h`      | 同一用户相同正文的去重窗口                                                  |
-| `server.trusted_proxies` | 空         | 逗号分隔的反向代理 IP/网段；留空不信任 `X-Forwarded-For`                  |
-| `database.busy_timeout` | `5s`        | SQLite 写锁等待时间                                                       |
-| `database.max_open_conns` | `1`       | 连接池上限；SQLite 建议 1，串行写避免 `database is locked`                |
+| 配置项                               | 默认值           | 说明                                                                        |
+| ------------------------------------ | ---------------- | --------------------------------------------------------------------------- |
+| `server.host`                        | 空               | debug 监听 `127.0.0.1`，release 监听 `0.0.0.0`                              |
+| `server.port`                        | `8080`           | HTTP 端口                                                                   |
+| `server.mode`                        | `release`        | `debug` / `release` / `test`，留空默认 `release`，`GIN_MODE` 优先           |
+| `access.mode`                        | `private`        | `private`：所有页面和操作必须登录；`public`：游客可浏览文章，写操作跳转登录 |
+| `database.path`                      | `./data/data.db` | SQLite 文件路径，目录自动创建                                               |
+| `jwt.secret`                         | 空               | 回退到 `JWT_SECRET` 或数据库自动生成                                        |
+| `jwt.ttl`                            | `24h`            | 不活跃容忍时长，活跃访问自动续期；`JWT_TTL` 环境变量优先                    |
+| `captcha.enabled`                    | `true`           | 注册人机验证开关；关闭后注册接口不再要求验证码 ticket                       |
+| `register.enabled`                   | `true`           | 注册开关；关闭后除首个管理员初始化外，其余注册返回 403                      |
+| `limits.post_per_minute`             | `5`              | 所有用户每分钟最多发文数                                                    |
+| `limits.comment_per_minute`          | `10`             | 所有用户每分钟最多评论数                                                    |
+| `limits.reaction_per_minute`         | `30`             | 所有用户每分钟最多互动数                                                    |
+| `limits.new_account_hours`           | `24h`            | 新账号判定窗口：注册不足该时长且未可信时使用严格配额                        |
+| `limits.new_account_post_per_day`    | `5`              | 新账号每天最多发文数                                                        |
+| `limits.new_account_comment_per_day` | `20`             | 新账号每天最多评论数                                                        |
+| `limits.post_per_day`                | `200`            | 普通用户每天最多发文数                                                      |
+| `limits.comment_per_day`             | `500`            | 普通用户每天最多评论数                                                      |
+| `limits.register_per_ip_per_hour`    | `10`             | 同一 IP 每小时最多成功注册数                                                |
+| `limits.register_per_ip_per_day`     | `20`             | 同一 IP 每天最多成功注册数                                                  |
+| `limits.min_password_bytes`          | `8`              | 注册/修改密码的最小字节数                                                   |
+| `limits.min_username_runes`          | `2`              | 用户名最小字符数                                                            |
+| `limits.max_username_runes`          | `32`             | 用户名最大字符数                                                            |
+| `limits.duplicate_window`            | `24h`            | 同一用户相同正文的去重窗口                                                  |
+| `server.trusted_proxies`             | 空               | 逗号分隔的反向代理 IP/网段；留空不信任 `X-Forwarded-For`                    |
+| `database.busy_timeout`              | `5s`             | SQLite 写锁等待时间                                                         |
+| `database.max_open_conns`            | `1`              | 连接池上限；SQLite 建议 1，串行写避免 `database is locked`                  |
 
 `access.mode = public` 时，游客可以匿名浏览首页、文章详情、评论列表、标签列表和排行榜；写文章、编辑/删除、点赞等互动、发表评论/回复仍要求登录：切换页面时显示 401 提示页，点赞/评论等互动会弹出登录提示。默认 `private`，所有页面和操作都必须登录。
 
@@ -89,6 +89,17 @@ docker run -d --name go-messager -p 8080:8080 \
   -e JWT_SECRET='请替换为随机长字符串' \
   ghcr.io/<owner>/go-messager:latest
 ```
+
+## 标签与审核
+
+- 标签有两种来源：管理员在「管理 → 标签管理」手动创建（创建即已审核），以及文章正文中的 `#标签` 自动提取。
+- 正文写法：`#` 后紧跟 1–30 个字母、数字、汉字、`_` 或 `-`，例如 `今天聊 #Go 和 #后端开发`；连续书写 `#Go#Gin#前端` 会识别为 3 个标签。`a#b`、`https://x/#a`、`##标题` 不会识别；代码块、行内代码、链接和图片中的内容也不会识别。
+- 自动提取的标签默认**待审核**：不进入文章下方标签区，也不参与首页上方的标签筛选；正文中仍以药丸样式高亮，未审核时使用默认灰色 `#6b7280`，悬浮提示「标签待审核」。
+- 管理员在标签管理处可以「审核通过 / 取消审核」。审核后使用管理员设置的颜色，并立即出现在文章标签区和首页筛选中。
+- 标签数量不设上限（手选和自动提取都算）。文章列表卡片最多展示 8 个，其余以 `+N` 收起；详情页展示全部。
+- 编辑文章时，正文中的 `#标签` 会实时解析并显示在标签区下方（「正文自动识别」），点击可定位到正文中的位置；预览区同步显示药丸效果。
+- 接口：`GET /api/tag` 只返回已审核标签；`GET /api/admin/tags` 返回全部标签，`PATCH /api/admin/tags/:id/review`（body `{"reviewed": true|false}`）审核或取消审核。
+- 升级说明：历史标签会一次性标记为已审核（`settings` 表 `tag_review_migrated` 标记），避免升级后首页筛选突然变空。
 
 ## 注册人机验证
 

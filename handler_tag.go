@@ -54,13 +54,59 @@ func (d *Data) CreateTag(c *gin.Context) {
 		return
 	}
 
-	tag := Tag{Name: name, Color: color}
+	tag := Tag{Name: name, Color: color, Reviewed: true}
 	if err := d.DB.Create(&tag).Error; err != nil {
 		Response{}.Fail(c, http.StatusInternalServerError, "CREATE_FAILED", err.Error())
 		return
 	}
 
 	Response{}.Ok(c, http.StatusCreated, tag)
+}
+
+// GetAdminTags 管理端标签列表，包含未审核标签。标签量不大，一次全量返回。
+func (d *Data) GetAdminTags(c *gin.Context) {
+	var tags []Tag
+	if err := d.DB.Order("reviewed ASC, usage_count DESC, name ASC").Find(&tags).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if tags == nil {
+		tags = []Tag{}
+	}
+	Response{}.Ok(c, http.StatusOK, tags)
+}
+
+// ReviewTag 审核或取消审核标签 PATCH /api/admin/tags/:id/review
+func (d *Data) ReviewTag(c *gin.Context) {
+	id, ok := parseTagID(c)
+	if !ok {
+		return
+	}
+
+	var req TagReviewInput
+	if err := c.ShouldBindJSON(&req); err != nil || req.Reviewed == nil {
+		Response{}.Fail(c, http.StatusBadRequest, "INVALID_BODY", "reviewed 必须是布尔值")
+		return
+	}
+
+	var tag Tag
+	if err := d.DB.Take(&tag, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			Response{}.Fail(c, http.StatusNotFound, "TAG_NOT_FOUND", "标签不存在")
+			return
+		}
+		Response{}.Fail(c, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+
+	if err := d.DB.Model(&tag).Update("reviewed", *req.Reviewed).Error; err != nil {
+		Response{}.Fail(c, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+	tag.Reviewed = *req.Reviewed
+
+	Response{}.Ok(c, http.StatusOK, tag)
 }
 
 // UpdateTag 编辑名称和颜色。
@@ -175,7 +221,7 @@ func (d *Data) GetTags(c *gin.Context) {
 	sortBy := c.DefaultQuery("sort", "name")
 	limit := parseTagLimit(c.Query("limit"))
 
-	db := d.DB.Model(&Tag{})
+	db := d.DB.Model(&Tag{}).Where("reviewed = ?", true)
 	if keyword != "" {
 		// 转义 LIKE 通配符。
 		db = db.Where("name LIKE ? ESCAPE '\\'", "%"+escapeLike(keyword)+"%")

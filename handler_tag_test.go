@@ -289,7 +289,7 @@ func (e *testEnv) createPost(t *testing.T, token string, body any) Post {
 	return decode[Post](t, resp)
 }
 
-func TestPostTagsLimit(t *testing.T) {
+func TestPostTagsUnlimited(t *testing.T) {
 	env := newTestEnv(t)
 
 	admin := env.register(t, "admin", "admin123")
@@ -309,43 +309,35 @@ func TestPostTagsLimit(t *testing.T) {
 		return out
 	}
 
-	// 超过 5 个
+	// 不存在的标签仍然拒绝。
 	code, resp := env.do(t, http.MethodPost, "/api/post/new", user.Token, PostInput{
-		Title: "too many", Body: "body", TagIDs: ids(6),
-	})
-	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "TOO_MANY_TAGS" {
-		t.Fatalf("6 个标签应 400 TOO_MANY_TAGS，实际 %d：%s", code, describe(resp))
-	}
-
-	// 不存在的标签
-	code, resp = env.do(t, http.MethodPost, "/api/post/new", user.Token, PostInput{
 		Title: "bad tag", Body: "body", TagIDs: []uint{99999},
 	})
 	if code != http.StatusBadRequest || resp.Error == nil || resp.Error.Code != "INVALID_TAGS" {
 		t.Fatalf("不存在的标签应 400 INVALID_TAGS，实际 %d：%s", code, describe(resp))
 	}
 
-	// 刚好 5 个
+	// 标签数量不设上限：6 个标签也能发布。
 	post := env.createPost(t, user.Token, PostInput{
-		Title: "hello", Body: "content", TagIDs: ids(5),
+		Title: "many tags", Body: "content", TagIDs: ids(6),
 	})
 	if post.User != "bob" {
 		t.Fatalf("作者应取自 token(bob)，实际 %s", post.User)
 	}
-	if len(post.Tags) != 5 {
-		t.Fatalf("文章应有 5 个标签，实际 %d", len(post.Tags))
+	if len(post.Tags) != 6 {
+		t.Fatalf("文章应有 6 个标签，实际 %d", len(post.Tags))
 	}
 
-	// 重复 ID 去重后不算超限
+	// 重复 ID 去重。
 	deduped := env.createPost(t, user.Token, PostInput{
-		Title: "dedupe", Body: "content",
+		Title: "dedupe", Body: "content 2",
 		TagIDs: []uint{tags[0].ID, tags[0].ID, tags[0].ID, tags[0].ID, tags[0].ID, tags[0].ID},
 	})
 	if len(deduped.Tags) != 1 {
 		t.Fatalf("重复标签应去重为 1 个，实际 %d", len(deduped.Tags))
 	}
 
-	// 使用次数：tags[0] 被两篇文章使用，其余各 1
+	// 使用次数：tags[0] 被两篇文章使用，其余各 1。
 	counts := make(map[uint]int64)
 	var stored []Tag
 	if err := env.db.Find(&stored).Error; err != nil {

@@ -38,6 +38,17 @@ defineEmits<{
 const renderedTitle = computed(() => renderEmojiText(props.title))
 const renderedSubtitle = computed(() => renderEmojiText(props.subtitle))
 const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
+
+// 列表卡片最多展示 8 个标签，详情页展示全部。
+const MAX_CARD_TAGS = 8
+const visibleTags = computed(() => {
+  const list = props.tags ?? []
+  return props.detail ? list : list.slice(0, MAX_CARD_TAGS)
+})
+const hiddenTags = computed(() => {
+  const list = props.tags ?? []
+  return props.detail ? [] : list.slice(MAX_CARD_TAGS)
+})
 </script>
 
 <template>
@@ -71,7 +82,7 @@ const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
         <p v-if="subtitle" class="min-w-0 break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
       </div>
 
-      <MarkdownContent v-if="detail" :source="body ?? ''" class="text-sm text-base-content/80" />
+      <MarkdownContent v-if="detail" :source="body ?? ''" :tags="tags" class="text-sm text-base-content/80" />
       <p v-else-if="excerpt" class="min-w-0 break-words whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
 
       <div v-if="!detail" class="flex justify-end">
@@ -84,11 +95,13 @@ const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
         </router-link>
       </div>
 
-      <div v-if="tags && tags.length" class="flex flex-wrap gap-1">
-        <span v-for="tag in tags" :key="tag.ID" class="badge badge-sm" :style="tagBadgeStyle(tag)"
+      <div v-if="visibleTags.length" class="flex flex-wrap gap-1">
+        <span v-for="tag in visibleTags" :key="tag.ID" class="badge badge-sm" :style="tagBadgeStyle(tag)"
           :title="`被 ${tag.usage_count} 篇文章使用`">
           #{{ tag.name }}
         </span>
+        <span v-if="hiddenTags.length" class="badge badge-sm badge-ghost"
+          :title="hiddenTags.map((tag) => `#${tag.name}`).join(' ')">+{{ hiddenTags.length }}</span>
       </div>
 
       <ReactionBar :reactions="reactions" :my-reactions="myReactions" :busy="reacting"
