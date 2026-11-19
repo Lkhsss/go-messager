@@ -4,6 +4,10 @@ run-name: CI测试 · ${{ gitea.sha }}
 
 on: [push, workflow_dispatch]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     name: 前端测试
