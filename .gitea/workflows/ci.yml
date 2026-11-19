@@ -30,7 +30,7 @@ jobs:
           install: false
 
       - run: pnpm install --frozen-lockfile # 确保使用锁文件中的精确版本
-      
+
       - name: 运行快速检查
         run: |
           pnpm run fmt:check
@@ -55,6 +55,7 @@ jobs:
           name: frontend-dist-size
           path: template/dist-size.txt
           if-no-files-found: error
+          retention-days: 3
 
   backend:
     name: 后端测试
@@ -171,3 +172,4 @@ jobs:
           name: ci-report
           path: report
           if-no-files-found: error
+          retention-days: 3
