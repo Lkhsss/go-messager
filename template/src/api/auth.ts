@@ -64,4 +64,3 @@ export async function removeAvatar(): Promise<AuthUser> {
   }
   return data.data;
 }
-

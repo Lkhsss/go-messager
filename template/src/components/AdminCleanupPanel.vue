@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from "vue";
 import {
   cleanupAll,
   cleanupCategory,
@@ -7,125 +7,125 @@ import {
   vacuumDatabase,
   type CleanupCategory,
   type CleanupStats,
-} from '@/api/adminCleanup'
-import { isApiError } from '@/api/http'
-import { formatBytes } from '@/utils/format'
-import CleanupChart from '@/components/charts/CleanupChart.vue'
+} from "@/api/adminCleanup";
+import { isApiError } from "@/api/http";
+import { formatBytes } from "@/utils/format";
+import CleanupChart from "@/components/charts/CleanupChart.vue";
 
 type PendingAction =
-  | { type: 'category'; category: CleanupCategory }
-  | { type: 'all' }
-  | { type: 'vacuum' }
+  | { type: "category"; category: CleanupCategory }
+  | { type: "all" }
+  | { type: "vacuum" };
 
-const stats = ref<CleanupStats | null>(null)
-const loading = ref(false)
-const saving = ref(false)
-const errorMsg = ref('')
-const successMsg = ref('')
+const stats = ref<CleanupStats | null>(null);
+const loading = ref(false);
+const saving = ref(false);
+const errorMsg = ref("");
+const successMsg = ref("");
 
-const dialog = ref<HTMLDialogElement | null>(null)
-const pending = ref<PendingAction | null>(null)
-const actionError = ref('')
+const dialog = ref<HTMLDialogElement | null>(null);
+const pending = ref<PendingAction | null>(null);
+const actionError = ref("");
 
-const categories = computed(() => stats.value?.categories ?? [])
-const totalCount = computed(() => stats.value?.total_count ?? 0)
-const totalBytes = computed(() => stats.value?.total_bytes ?? 0)
+const categories = computed(() => stats.value?.categories ?? []);
+const totalCount = computed(() => stats.value?.total_count ?? 0);
+const totalBytes = computed(() => stats.value?.total_bytes ?? 0);
 
 const dialogTitle = computed(() => {
-  if (!pending.value) return ''
-  if (pending.value.type === 'all') return '清理全部'
-  if (pending.value.type === 'vacuum') return '压缩数据库'
-  return `清理${pending.value.category.label}`
-})
+  if (!pending.value) return "";
+  if (pending.value.type === "all") return "清理全部";
+  if (pending.value.type === "vacuum") return "压缩数据库";
+  return `清理${pending.value.category.label}`;
+});
 
 const dialogDescription = computed(() => {
-  if (!pending.value) return ''
-  if (pending.value.type === 'all') {
-    return `将永久删除全部 ${totalCount.value} 项可清理数据，估算释放 ${formatBytes(totalBytes.value)}，且不可恢复。`
+  if (!pending.value) return "";
+  if (pending.value.type === "all") {
+    return `将永久删除全部 ${totalCount.value} 项可清理数据，估算释放 ${formatBytes(totalBytes.value)}，且不可恢复。`;
   }
-  if (pending.value.type === 'vacuum') {
-    return '将重建数据库文件并回收空闲页。执行期间会短暂占用较多磁盘和 CPU，建议在低峰时段操作。'
+  if (pending.value.type === "vacuum") {
+    return "将重建数据库文件并回收空闲页。执行期间会短暂占用较多磁盘和 CPU，建议在低峰时段操作。";
   }
-  const { category } = pending.value
-  return `将永久删除 ${category.count} 项${category.label}，估算释放 ${formatBytes(category.bytes)}，且不可恢复。`
-})
+  const { category } = pending.value;
+  return `将永久删除 ${category.count} 项${category.label}，估算释放 ${formatBytes(category.bytes)}，且不可恢复。`;
+});
 
 async function load() {
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = "";
   try {
-    stats.value = await fetchCleanupStats()
+    stats.value = await fetchCleanupStats();
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '获取清理统计失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "获取清理统计失败，请稍后再试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function openAction(action: PendingAction) {
-  if (saving.value) return
-  pending.value = action
-  actionError.value = ''
-  successMsg.value = ''
+  if (saving.value) return;
+  pending.value = action;
+  actionError.value = "";
+  successMsg.value = "";
   if (!dialog.value?.open) {
-    dialog.value?.showModal()
+    dialog.value?.showModal();
   }
 }
 
 function openCategory(category: CleanupCategory) {
-  if (category.count <= 0) return
-  openAction({ type: 'category', category })
+  if (category.count <= 0) return;
+  openAction({ type: "category", category });
 }
 
 function closeDialog() {
-  if (saving.value) return
-  dialog.value?.close()
+  if (saving.value) return;
+  dialog.value?.close();
 }
 
 function onDialogClosed() {
-  pending.value = null
-  actionError.value = ''
+  pending.value = null;
+  actionError.value = "";
 }
 
 function onDialogCancel(event: Event) {
   if (saving.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function confirmAction() {
-  const action = pending.value
-  if (!action || saving.value) return
+  const action = pending.value;
+  if (!action || saving.value) return;
 
-  saving.value = true
-  actionError.value = ''
-  successMsg.value = ''
+  saving.value = true;
+  actionError.value = "";
+  successMsg.value = "";
   try {
-    if (action.type === 'category') {
-      const result = await cleanupCategory(action.category.key)
-      successMsg.value = `已清理${action.category.label} ${result.deleted} 项，估算释放 ${formatBytes(result.freed_bytes)}`
-    } else if (action.type === 'all') {
-      const results = await cleanupAll()
-      const deleted = results.reduce((sum, item) => sum + item.deleted, 0)
-      const freed = results.reduce((sum, item) => sum + item.freed_bytes, 0)
-      successMsg.value = `已清理 ${deleted} 项，估算释放 ${formatBytes(freed)}`
+    if (action.type === "category") {
+      const result = await cleanupCategory(action.category.key);
+      successMsg.value = `已清理${action.category.label} ${result.deleted} 项，估算释放 ${formatBytes(result.freed_bytes)}`;
+    } else if (action.type === "all") {
+      const results = await cleanupAll();
+      const deleted = results.reduce((sum, item) => sum + item.deleted, 0);
+      const freed = results.reduce((sum, item) => sum + item.freed_bytes, 0);
+      successMsg.value = `已清理 ${deleted} 项，估算释放 ${formatBytes(freed)}`;
     } else {
-      const result = await vacuumDatabase()
-      successMsg.value = `数据库已压缩，回收 ${formatBytes(result.freed_bytes)}，当前大小 ${formatBytes(result.after_bytes)}`
+      const result = await vacuumDatabase();
+      successMsg.value = `数据库已压缩，回收 ${formatBytes(result.freed_bytes)}，当前大小 ${formatBytes(result.after_bytes)}`;
     }
 
-    await load()
-    dialog.value?.close()
+    await load();
+    dialog.value?.close();
   } catch (err) {
-    actionError.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+    actionError.value = isApiError(err) ? err.message : "操作失败，请稍后再试";
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 onMounted(() => {
-  void load()
-})
+  void load();
+});
 </script>
 <template>
   <div class="space-y-4">
@@ -138,7 +138,12 @@ onMounted(() => {
               清理软删除的文章、孤立评论与残留数据；删除后不可恢复，建议操作前备份数据库。
             </p>
           </div>
-          <button type="button" class="btn btn-sm btn-ghost" :disabled="loading || saving" @click="load">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            :disabled="loading || saving"
+            @click="load"
+          >
             刷新统计
           </button>
         </div>
@@ -153,8 +158,12 @@ onMounted(() => {
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="rounded-box border border-base-200 p-3">
             <p class="text-xs text-base-content/55">数据库大小</p>
-            <p class="mt-1 text-lg font-semibold">{{ formatBytes(stats?.database.file_size_bytes ?? 0) }}</p>
-            <p class="mt-1 text-xs text-base-content/45">空闲页 {{ formatBytes(stats?.database.free_bytes ?? 0) }}</p>
+            <p class="mt-1 text-lg font-semibold">
+              {{ formatBytes(stats?.database.file_size_bytes ?? 0) }}
+            </p>
+            <p class="mt-1 text-xs text-base-content/45">
+              空闲页 {{ formatBytes(stats?.database.free_bytes ?? 0) }}
+            </p>
           </div>
           <div class="rounded-box border border-base-200 p-3">
             <p class="text-xs text-base-content/55">可清理条目</p>
@@ -173,30 +182,50 @@ onMounted(() => {
         </div>
 
         <div class="space-y-2">
-          <div v-for="category in categories" :key="category.key"
-            class="flex flex-wrap items-center gap-2 rounded-box border border-base-200 px-3 py-2">
+          <div
+            v-for="category in categories"
+            :key="category.key"
+            class="flex flex-wrap items-center gap-2 rounded-box border border-base-200 px-3 py-2"
+          >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm font-medium">{{ category.label }}</span>
                 <span class="badge badge-ghost badge-sm">{{ category.count }} 项</span>
-                <span class="text-xs text-base-content/50">约 {{ formatBytes(category.bytes) }}</span>
+                <span class="text-xs text-base-content/50"
+                  >约 {{ formatBytes(category.bytes) }}</span
+                >
               </div>
               <p class="mt-1 text-xs text-base-content/55">{{ category.description }}</p>
             </div>
-            <button type="button" class="btn btn-sm btn-warning"
-              :disabled="loading || saving || category.count === 0" @click="openCategory(category)">
+            <button
+              type="button"
+              class="btn btn-sm btn-warning"
+              :disabled="loading || saving || category.count === 0"
+              @click="openCategory(category)"
+            >
               清理
             </button>
           </div>
-          <p v-if="!loading && categories.length === 0" class="text-sm text-base-content/60">暂无分类数据</p>
+          <p v-if="!loading && categories.length === 0" class="text-sm text-base-content/60">
+            暂无分类数据
+          </p>
         </div>
 
         <div class="flex flex-wrap justify-end gap-2">
-          <button type="button" class="btn btn-sm" :disabled="loading || saving" @click="openAction({ type: 'vacuum' })">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :disabled="loading || saving"
+            @click="openAction({ type: 'vacuum' })"
+          >
             压缩数据库
           </button>
-          <button type="button" class="btn btn-sm btn-error" :disabled="loading || saving || totalCount === 0"
-            @click="openAction({ type: 'all' })">
+          <button
+            type="button"
+            class="btn btn-sm btn-error"
+            :disabled="loading || saving || totalCount === 0"
+            @click="openAction({ type: 'all' })"
+          >
             一键清理全部
           </button>
         </div>
@@ -216,9 +245,16 @@ onMounted(() => {
         </div>
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" :disabled="saving" @click="closeDialog">取消</button>
-          <button type="button" class="btn" :class="pending?.type === 'vacuum' ? 'btn-warning' : 'btn-error'"
-            :disabled="saving" @click="confirmAction">
+          <button type="button" class="btn btn-ghost" :disabled="saving" @click="closeDialog">
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :class="pending?.type === 'vacuum' ? 'btn-warning' : 'btn-error'"
+            :disabled="saving"
+            @click="confirmAction"
+          >
             <span v-if="saving" class="loading loading-spinner loading-sm"></span>
             确定
           </button>

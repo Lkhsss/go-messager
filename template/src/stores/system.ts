@@ -21,7 +21,7 @@ export const useSystemStore = defineStore("system", () => {
   function applyStatus(status: SystemStatus) {
     initialized.value = status.initialized;
     mode.value = status.mode === "public" ? "public" : "private";
-    maintenance.value = { ...DEFAULT_MAINTENANCE, ...(status.maintenance ?? {}) };
+    maintenance.value = { ...DEFAULT_MAINTENANCE, ...status.maintenance };
     registerEnabled.value = status.register_enabled !== false;
   }
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import Pagination from '@/components/Pagination.vue'
-import UserAvatar from '@/components/UserAvatar.vue'
-import UserStatsCards from '@/components/UserStatsCards.vue'
+import { computed, onMounted, ref } from "vue";
+import Pagination from "@/components/Pagination.vue";
+import UserAvatar from "@/components/UserAvatar.vue";
+import UserStatsCards from "@/components/UserStatsCards.vue";
 import {
   changeAdminUserPassword,
   clearAdminUserPosts,
@@ -15,302 +15,301 @@ import {
   type AdminUserDetail,
   type AdminUserItem,
   type AdminUserRole,
-} from '@/api/adminUser'
-import { isApiError, type PaginationMeta } from '@/api/http'
+} from "@/api/adminUser";
+import { isApiError, type PaginationMeta } from "@/api/http";
 
-const PER_PAGE = 10
+const PER_PAGE = 10;
 
-const users = ref<AdminUserItem[]>([])
-const meta = ref<PaginationMeta | null>(null)
-const page = ref(1)
-const keyword = ref('')
-const loading = ref(false)
-const errorMsg = ref('')
-const successMsg = ref('')
+const users = ref<AdminUserItem[]>([]);
+const meta = ref<PaginationMeta | null>(null);
+const page = ref(1);
+const keyword = ref("");
+const loading = ref(false);
+const errorMsg = ref("");
+const successMsg = ref("");
 
-const detailDialog = ref<HTMLDialogElement | null>(null)
-const selectedUser = ref<AdminUserItem | null>(null)
-const detail = ref<AdminUserDetail | null>(null)
-const detailLoading = ref(false)
-const detailError = ref('')
+const detailDialog = ref<HTMLDialogElement | null>(null);
+const selectedUser = ref<AdminUserItem | null>(null);
+const detail = ref<AdminUserDetail | null>(null);
+const detailLoading = ref(false);
+const detailError = ref("");
 
-const passwordDialog = ref<HTMLDialogElement | null>(null)
-const passwordTarget = ref<AdminUserItem | null>(null)
-const newPassword = ref('')
-const passwordSaving = ref(false)
-const passwordError = ref('')
+const passwordDialog = ref<HTMLDialogElement | null>(null);
+const passwordTarget = ref<AdminUserItem | null>(null);
+const newPassword = ref("");
+const passwordSaving = ref(false);
+const passwordError = ref("");
 
-type ActionMode = 'disable' | 'enable' | 'delete' | 'clear-posts' | 'trust' | 'untrust'
+type ActionMode = "disable" | "enable" | "delete" | "clear-posts" | "trust" | "untrust";
 
-const actionDialog = ref<HTMLDialogElement | null>(null)
-const actionTarget = ref<AdminUserItem | null>(null)
-const actionMode = ref<ActionMode>('disable')
-const actionSaving = ref(false)
-const actionError = ref('')
+const actionDialog = ref<HTMLDialogElement | null>(null);
+const actionTarget = ref<AdminUserItem | null>(null);
+const actionMode = ref<ActionMode>("disable");
+const actionSaving = ref(false);
+const actionError = ref("");
 
-const purgeDialog = ref<HTMLDialogElement | null>(null)
-const purgeSaving = ref(false)
-const purgeError = ref('')
+const purgeDialog = ref<HTMLDialogElement | null>(null);
+const purgeSaving = ref(false);
+const purgeError = ref("");
 
 const actionTitle = computed(() => {
-  if (actionMode.value === 'delete') return '删除用户'
-  if (actionMode.value === 'clear-posts') return '清空文章'
-  if (actionMode.value === 'trust') return '设为可信用户'
-  if (actionMode.value === 'untrust') return '取消可信'
-  return actionMode.value === 'disable' ? '封禁用户' : '解封用户'
-})
+  if (actionMode.value === "delete") return "删除用户";
+  if (actionMode.value === "clear-posts") return "清空文章";
+  if (actionMode.value === "trust") return "设为可信用户";
+  if (actionMode.value === "untrust") return "取消可信";
+  return actionMode.value === "disable" ? "封禁用户" : "解封用户";
+});
 
 function formatDate(value?: string | null): string {
-  if (!value) return '从未'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
+  if (!value) return "从未";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN");
 }
 
 function roleLabel(role: AdminUserRole): string {
-  if (role === 'admin') return '管理员'
-  if (role === 'none') return '已封禁'
-  return '用户'
+  if (role === "admin") return "管理员";
+  if (role === "none") return "已封禁";
+  return "用户";
 }
 
 function roleBadgeClass(role: AdminUserRole): string {
-  if (role === 'admin') return 'badge-primary'
-  if (role === 'none') return 'badge-error'
-  return 'badge-ghost'
+  if (role === "admin") return "badge-primary";
+  if (role === "none") return "badge-error";
+  return "badge-ghost";
 }
 
 async function loadUsers(next = page.value, query = keyword.value) {
-  if (loading.value) return
+  if (loading.value) return;
 
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = "";
   try {
-    const result = await fetchAdminUsers({ page: next, perPage: PER_PAGE, q: query })
-    users.value = result.users
-    meta.value = result.meta
-    page.value = result.meta.page > 0 ? result.meta.page : next
-    keyword.value = query.trim()
+    const result = await fetchAdminUsers({ page: next, perPage: PER_PAGE, q: query });
+    users.value = result.users;
+    meta.value = result.meta;
+    page.value = result.meta.page > 0 ? result.meta.page : next;
+    keyword.value = query.trim();
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '获取用户列表失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "获取用户列表失败，请稍后再试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function submitSearch() {
-  void loadUsers(1)
+  void loadUsers(1);
 }
 
 function goTo(next: number) {
-  const totalPages = meta.value?.total_pages ?? 0
-  if (loading.value || next < 1 || next > totalPages || next === page.value) return
-  void loadUsers(next)
+  const totalPages = meta.value?.total_pages ?? 0;
+  if (loading.value || next < 1 || next > totalPages || next === page.value) return;
+  void loadUsers(next);
 }
 
 function openDetail(user: AdminUserItem) {
-  selectedUser.value = user
-  detail.value = null
-  detailError.value = ''
+  selectedUser.value = user;
+  detail.value = null;
+  detailError.value = "";
   if (!detailDialog.value?.open) {
-    detailDialog.value?.showModal()
+    detailDialog.value?.showModal();
   }
-  void loadDetail(user.id)
+  void loadDetail(user.id);
 }
 
 async function loadDetail(id: number) {
-  detailLoading.value = true
-  detailError.value = ''
+  detailLoading.value = true;
+  detailError.value = "";
   try {
-    detail.value = await fetchAdminUserDetail(id)
+    detail.value = await fetchAdminUserDetail(id);
   } catch (err) {
-    detailError.value = isApiError(err) ? err.message : '获取用户详情失败，请稍后再试'
+    detailError.value = isApiError(err) ? err.message : "获取用户详情失败，请稍后再试";
   } finally {
-    detailLoading.value = false
+    detailLoading.value = false;
   }
 }
 
 function closeDetail() {
-  detailDialog.value?.close()
+  detailDialog.value?.close();
 }
 
 function onDetailClosed() {
-  selectedUser.value = null
-  detail.value = null
-  detailError.value = ''
+  selectedUser.value = null;
+  detail.value = null;
+  detailError.value = "";
 }
 
 function openPassword(user: AdminUserItem) {
-  passwordTarget.value = user
-  newPassword.value = ''
-  passwordError.value = ''
+  passwordTarget.value = user;
+  newPassword.value = "";
+  passwordError.value = "";
   if (!passwordDialog.value?.open) {
-    passwordDialog.value?.showModal()
+    passwordDialog.value?.showModal();
   }
 }
 
 function closePassword() {
-  if (passwordSaving.value) return
-  passwordDialog.value?.close()
+  if (passwordSaving.value) return;
+  passwordDialog.value?.close();
 }
 
 function onPasswordClosed() {
-  passwordTarget.value = null
-  newPassword.value = ''
-  passwordError.value = ''
+  passwordTarget.value = null;
+  newPassword.value = "";
+  passwordError.value = "";
 }
 
 function onPasswordCancel(event: Event) {
   if (passwordSaving.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function savePassword() {
-  if (passwordSaving.value) return
+  if (passwordSaving.value) return;
 
-  const target = passwordTarget.value
-  if (!target) return
+  const target = passwordTarget.value;
+  if (!target) return;
   if (!newPassword.value) {
-    passwordError.value = '密码不能为空'
-    return
+    passwordError.value = "密码不能为空";
+    return;
   }
   if (new TextEncoder().encode(newPassword.value).length < 8) {
-    passwordError.value = '密码至少 8 个字节'
-    return
+    passwordError.value = "密码至少 8 个字节";
+    return;
   }
   if (new TextEncoder().encode(newPassword.value).length > 72) {
-    passwordError.value = '密码最多 72 字节'
-    return
+    passwordError.value = "密码最多 72 字节";
+    return;
   }
 
-  passwordSaving.value = true
-  passwordError.value = ''
-  successMsg.value = ''
+  passwordSaving.value = true;
+  passwordError.value = "";
+  successMsg.value = "";
   try {
-    await changeAdminUserPassword(target.id, newPassword.value)
-    successMsg.value = `已修改「${target.name}」的密码`
-    passwordSaving.value = false
-    passwordDialog.value?.close()
+    await changeAdminUserPassword(target.id, newPassword.value);
+    successMsg.value = `已修改「${target.name}」的密码`;
+    passwordSaving.value = false;
+    passwordDialog.value?.close();
   } catch (err) {
-    passwordError.value = isApiError(err) ? err.message : '修改密码失败，请稍后再试'
+    passwordError.value = isApiError(err) ? err.message : "修改密码失败，请稍后再试";
   } finally {
-    passwordSaving.value = false
+    passwordSaving.value = false;
   }
 }
 
 function openAction(user: AdminUserItem, mode: ActionMode) {
-  actionTarget.value = user
-  actionMode.value = mode
-  actionError.value = ''
+  actionTarget.value = user;
+  actionMode.value = mode;
+  actionError.value = "";
   if (!actionDialog.value?.open) {
-    actionDialog.value?.showModal()
+    actionDialog.value?.showModal();
   }
 }
 
 function closeAction() {
-  if (actionSaving.value) return
-  actionDialog.value?.close()
+  if (actionSaving.value) return;
+  actionDialog.value?.close();
 }
 
 function onActionClosed() {
-  actionTarget.value = null
-  actionError.value = ''
+  actionTarget.value = null;
+  actionError.value = "";
 }
 
 function onActionCancel(event: Event) {
   if (actionSaving.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function confirmAction() {
-  if (actionSaving.value) return
+  if (actionSaving.value) return;
 
-  const target = actionTarget.value
-  if (!target) return
+  const target = actionTarget.value;
+  if (!target) return;
 
-  actionSaving.value = true
-  actionError.value = ''
-  successMsg.value = ''
+  actionSaving.value = true;
+  actionError.value = "";
+  successMsg.value = "";
   try {
-    if (actionMode.value === 'delete') {
-      await deleteAdminUser(target.id)
-      successMsg.value = `用户「${target.name}」已删除`
-    } else if (actionMode.value === 'clear-posts') {
-      const result = await clearAdminUserPosts(target.id)
-      successMsg.value = `已清空「${target.name}」的 ${result.deleted} 篇文章（含 ${result.comments} 条评论）`
-    } else if (actionMode.value === 'trust' || actionMode.value === 'untrust') {
-      const trusted = actionMode.value === 'trust'
-      await setAdminUserTrusted(target.id, trusted)
+    if (actionMode.value === "delete") {
+      await deleteAdminUser(target.id);
+      successMsg.value = `用户「${target.name}」已删除`;
+    } else if (actionMode.value === "clear-posts") {
+      const result = await clearAdminUserPosts(target.id);
+      successMsg.value = `已清空「${target.name}」的 ${result.deleted} 篇文章（含 ${result.comments} 条评论）`;
+    } else if (actionMode.value === "trust" || actionMode.value === "untrust") {
+      const trusted = actionMode.value === "trust";
+      await setAdminUserTrusted(target.id, trusted);
       successMsg.value = trusted
         ? `已将「${target.name}」标记为可信用户`
-        : `已取消「${target.name}」的可信标记`
+        : `已取消「${target.name}」的可信标记`;
     } else {
-      const disabled = actionMode.value === 'disable'
-      await setAdminUserDisabled(target.id, disabled)
-      successMsg.value = disabled
-        ? `用户「${target.name}」已封禁`
-        : `用户「${target.name}」已解封`
+      const disabled = actionMode.value === "disable";
+      await setAdminUserDisabled(target.id, disabled);
+      successMsg.value = disabled ? `用户「${target.name}」已封禁` : `用户「${target.name}」已解封`;
     }
 
-    actionSaving.value = false
-    actionDialog.value?.close()
+    actionSaving.value = false;
+    actionDialog.value?.close();
 
     // 删除当前页最后一条时回到上一页，避免停在空页。
-    const nextPage = actionMode.value === 'delete' && users.value.length === 1 && page.value > 1
-      ? page.value - 1
-      : page.value
-    await loadUsers(nextPage)
+    const nextPage =
+      actionMode.value === "delete" && users.value.length === 1 && page.value > 1
+        ? page.value - 1
+        : page.value;
+    await loadUsers(nextPage);
   } catch (err) {
-    actionError.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+    actionError.value = isApiError(err) ? err.message : "操作失败，请稍后再试";
   } finally {
-    actionSaving.value = false
+    actionSaving.value = false;
   }
 }
 
 function openPurge() {
-  purgeError.value = ''
+  purgeError.value = "";
   if (!purgeDialog.value?.open) {
-    purgeDialog.value?.showModal()
+    purgeDialog.value?.showModal();
   }
 }
 
 function closePurge() {
-  if (purgeSaving.value) return
-  purgeDialog.value?.close()
+  if (purgeSaving.value) return;
+  purgeDialog.value?.close();
 }
 
 function onPurgeClosed() {
-  purgeError.value = ''
+  purgeError.value = "";
 }
 
 function onPurgeCancel(event: Event) {
   if (purgeSaving.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function confirmPurge() {
-  if (purgeSaving.value) return
+  if (purgeSaving.value) return;
 
-  purgeSaving.value = true
-  purgeError.value = ''
-  successMsg.value = ''
+  purgeSaving.value = true;
+  purgeError.value = "";
+  successMsg.value = "";
   try {
-    const result = await deleteUntrustedUsers()
-    successMsg.value = `已清理 ${result.deleted} 个未可信用户（${result.posts} 篇文章、${result.comments} 条评论）`
-    purgeSaving.value = false
-    purgeDialog.value?.close()
-    await loadUsers(1)
+    const result = await deleteUntrustedUsers();
+    successMsg.value = `已清理 ${result.deleted} 个未可信用户（${result.posts} 篇文章、${result.comments} 条评论）`;
+    purgeSaving.value = false;
+    purgeDialog.value?.close();
+    await loadUsers(1);
   } catch (err) {
-    purgeError.value = isApiError(err) ? err.message : '清理未可信用户失败，请稍后再试'
+    purgeError.value = isApiError(err) ? err.message : "清理未可信用户失败，请稍后再试";
   } finally {
-    purgeSaving.value = false
+    purgeSaving.value = false;
   }
 }
 
 onMounted(() => {
-  void loadUsers()
-})
+  void loadUsers();
+});
 </script>
 
 <template>
@@ -323,11 +322,22 @@ onMounted(() => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <form class="join" @submit.prevent="submitSearch">
-            <input v-model="keyword" type="search" placeholder="搜索用户名" aria-label="搜索用户名"
-              class="input input-bordered input-sm join-item w-40 sm:w-52" :disabled="loading" />
+            <input
+              v-model="keyword"
+              type="search"
+              placeholder="搜索用户名"
+              aria-label="搜索用户名"
+              class="input input-bordered input-sm join-item w-40 sm:w-52"
+              :disabled="loading"
+            />
             <button type="submit" class="btn btn-sm join-item" :disabled="loading">搜索</button>
           </form>
-          <button type="button" class="btn btn-sm btn-warning" :disabled="loading || purgeSaving" @click="openPurge">
+          <button
+            type="button"
+            class="btn btn-sm btn-warning"
+            :disabled="loading || purgeSaving"
+            @click="openPurge"
+          >
             清理未可信用户
           </button>
         </div>
@@ -349,18 +359,26 @@ onMounted(() => {
       </div>
 
       <div v-else class="space-y-2" :class="{ 'opacity-60': loading }">
-        <article v-for="user in users" :key="user.id"
-          class="rounded-box border border-base-200 bg-base-100 p-3 transition hover:border-base-300">
+        <article
+          v-for="user in users"
+          :key="user.id"
+          class="rounded-box border border-base-200 bg-base-100 p-3 transition hover:border-base-300"
+        >
           <div class="flex flex-wrap items-center gap-3">
             <UserAvatar :name="user.name" :version="user.avatar_version" :size="40" />
 
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="truncate font-medium">{{ user.name }}</span>
-                <span class="badge badge-sm" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
-                <span v-if="user.role !== 'admin'" class="badge badge-sm"
-                  :class="user.trusted ? 'badge-success' : 'badge-ghost'">
-                  {{ user.trusted ? '可信' : '未可信' }}
+                <span class="badge badge-sm" :class="roleBadgeClass(user.role)">{{
+                  roleLabel(user.role)
+                }}</span>
+                <span
+                  v-if="user.role !== 'admin'"
+                  class="badge badge-sm"
+                  :class="user.trusted ? 'badge-success' : 'badge-ghost'"
+                >
+                  {{ user.trusted ? "可信" : "未可信" }}
                 </span>
               </div>
               <p class="mt-1 text-xs text-base-content/45">
@@ -384,31 +402,70 @@ onMounted(() => {
             </div>
 
             <div class="flex flex-wrap items-center justify-end gap-1">
-              <button type="button" class="btn btn-ghost btn-xs" :disabled="loading" @click="openDetail(user)">详情</button>
-              <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs"
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                :disabled="loading"
+                @click="openDetail(user)"
+              >
+                详情
+              </button>
+              <button
+                v-if="user.role !== 'admin'"
+                type="button"
+                class="btn btn-ghost btn-xs"
                 :disabled="loading || actionSaving"
-                @click="openAction(user, user.trusted ? 'untrust' : 'trust')">
-                {{ user.trusted ? '取消可信' : '设为可信' }}
+                @click="openAction(user, user.trusted ? 'untrust' : 'trust')"
+              >
+                {{ user.trusted ? "取消可信" : "设为可信" }}
               </button>
-              <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs"
+              <button
+                v-if="user.role !== 'admin'"
+                type="button"
+                class="btn btn-ghost btn-xs"
                 :disabled="loading || actionSaving || passwordSaving"
-                @click="openAction(user, user.role === 'none' ? 'enable' : 'disable')">
-                {{ user.role === 'none' ? '解封' : '封禁' }}
+                @click="openAction(user, user.role === 'none' ? 'enable' : 'disable')"
+              >
+                {{ user.role === "none" ? "解封" : "封禁" }}
               </button>
-              <button type="button" class="btn btn-ghost btn-xs" :disabled="loading || passwordSaving"
-                @click="openPassword(user)">修改密码</button>
-              <button v-if="user.role !== 'admin' && user.post_count > 0" type="button"
-                class="btn btn-ghost btn-xs text-warning" :disabled="loading || actionSaving"
-                @click="openAction(user, 'clear-posts')">清空文章</button>
-              <button v-if="user.role !== 'admin'" type="button" class="btn btn-ghost btn-xs text-error"
-                :disabled="loading || actionSaving" @click="openAction(user, 'delete')">删除</button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                :disabled="loading || passwordSaving"
+                @click="openPassword(user)"
+              >
+                修改密码
+              </button>
+              <button
+                v-if="user.role !== 'admin' && user.post_count > 0"
+                type="button"
+                class="btn btn-ghost btn-xs text-warning"
+                :disabled="loading || actionSaving"
+                @click="openAction(user, 'clear-posts')"
+              >
+                清空文章
+              </button>
+              <button
+                v-if="user.role !== 'admin'"
+                type="button"
+                class="btn btn-ghost btn-xs text-error"
+                :disabled="loading || actionSaving"
+                @click="openAction(user, 'delete')"
+              >
+                删除
+              </button>
             </div>
           </div>
         </article>
       </div>
 
       <div v-if="(meta?.total_pages ?? 0) > 1" class="flex justify-end">
-        <Pagination :page="page" :total-pages="meta?.total_pages ?? 0" :disabled="loading" @change="goTo" />
+        <Pagination
+          :page="page"
+          :total-pages="meta?.total_pages ?? 0"
+          :disabled="loading"
+          @change="goTo"
+        />
       </div>
     </div>
   </section>
@@ -422,13 +479,16 @@ onMounted(() => {
             {{ detail?.user.name ?? selectedUser?.name }}
           </h3>
           <p class="mt-1 text-xs text-base-content/45">
-            注册 {{ formatDate(detail?.user.created_at ?? selectedUser?.created_at) }}
-            · 上次活跃 {{ formatDate(detail?.user.last_active_at ?? selectedUser?.last_active_at) }}
-            · 登录 {{ detail?.user.login_count ?? selectedUser?.login_count ?? 0 }} 次
+            注册 {{ formatDate(detail?.user.created_at ?? selectedUser?.created_at) }} · 上次活跃
+            {{ formatDate(detail?.user.last_active_at ?? selectedUser?.last_active_at) }} · 登录
+            {{ detail?.user.login_count ?? selectedUser?.login_count ?? 0 }} 次
           </p>
         </div>
-        <span class="badge" :class="roleBadgeClass(detail?.user.role ?? selectedUser?.role ?? 'user')">
-          {{ roleLabel(detail?.user.role ?? selectedUser?.role ?? 'user') }}
+        <span
+          class="badge"
+          :class="roleBadgeClass(detail?.user.role ?? selectedUser?.role ?? 'user')"
+        >
+          {{ roleLabel(detail?.user.role ?? selectedUser?.role ?? "user") }}
         </span>
       </div>
 
@@ -437,7 +497,14 @@ onMounted(() => {
       </div>
       <div v-else-if="detailError" role="alert" class="alert alert-error alert-soft mt-4">
         <span>{{ detailError }}</span>
-        <button v-if="selectedUser" type="button" class="btn btn-sm" @click="loadDetail(selectedUser.id)">重试</button>
+        <button
+          v-if="selectedUser"
+          type="button"
+          class="btn btn-sm"
+          @click="loadDetail(selectedUser.id)"
+        >
+          重试
+        </button>
       </div>
       <div v-else-if="detail" class="mt-4">
         <UserStatsCards :stats="detail.stats" />
@@ -458,8 +525,14 @@ onMounted(() => {
 
       <label class="floating-label mt-4">
         <span>新密码</span>
-        <input v-model="newPassword" type="password" placeholder="输入新密码" autocomplete="new-password"
-          class="input input-bordered w-full" :disabled="passwordSaving" />
+        <input
+          v-model="newPassword"
+          type="password"
+          placeholder="输入新密码"
+          autocomplete="new-password"
+          class="input input-bordered w-full"
+          :disabled="passwordSaving"
+        />
       </label>
 
       <div v-if="passwordError" role="alert" class="alert alert-error alert-soft mt-3 py-2 text-sm">
@@ -467,7 +540,14 @@ onMounted(() => {
       </div>
 
       <div class="modal-action">
-        <button type="button" class="btn btn-ghost" :disabled="passwordSaving" @click="closePassword">取消</button>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :disabled="passwordSaving"
+          @click="closePassword"
+        >
+          取消
+        </button>
         <button type="submit" class="btn btn-primary" :disabled="passwordSaving">
           <span v-if="passwordSaving" class="loading loading-spinner loading-sm"></span>
           保存
@@ -494,7 +574,8 @@ onMounted(() => {
           只删除账号，文章和评论会保留。删除后账号不能登录，且不可恢复。
         </p>
         <p v-else-if="actionMode === 'clear-posts'" class="text-warning">
-          将删除该用户的全部文章（{{ actionTarget?.post_count ?? 0 }} 篇）及其下的所有评论和回复，账号本身保留。文章为软删除，界面内无法恢复。
+          将删除该用户的全部文章（{{ actionTarget?.post_count ?? 0 }}
+          篇）及其下的所有评论和回复，账号本身保留。文章为软删除，界面内无法恢复。
         </p>
         <p v-else-if="actionMode === 'disable'" class="text-warning">
           封禁后该用户会立即无法登录，已登录的令牌也会失效。
@@ -513,10 +594,22 @@ onMounted(() => {
       </div>
 
       <div class="modal-action">
-        <button type="button" class="btn btn-ghost" :disabled="actionSaving" @click="closeAction">取消</button>
-        <button type="button" class="btn"
-          :class="actionMode === 'delete' ? 'btn-error' : actionMode === 'disable' || actionMode === 'clear-posts' || actionMode === 'untrust' ? 'btn-warning' : 'btn-primary'"
-          :disabled="actionSaving" @click="confirmAction">
+        <button type="button" class="btn btn-ghost" :disabled="actionSaving" @click="closeAction">
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="
+            actionMode === 'delete'
+              ? 'btn-error'
+              : actionMode === 'disable' || actionMode === 'clear-posts' || actionMode === 'untrust'
+                ? 'btn-warning'
+                : 'btn-primary'
+          "
+          :disabled="actionSaving"
+          @click="confirmAction"
+        >
           <span v-if="actionSaving" class="loading loading-spinner loading-sm"></span>
           确定
         </button>
@@ -544,7 +637,9 @@ onMounted(() => {
       </div>
 
       <div class="modal-action">
-        <button type="button" class="btn btn-ghost" :disabled="purgeSaving" @click="closePurge">取消</button>
+        <button type="button" class="btn btn-ghost" :disabled="purgeSaving" @click="closePurge">
+          取消
+        </button>
         <button type="button" class="btn btn-error" :disabled="purgeSaving" @click="confirmPurge">
           <span v-if="purgeSaving" class="loading loading-spinner loading-sm"></span>
           确定清理
@@ -556,4 +651,3 @@ onMounted(() => {
     </form>
   </dialog>
 </template>
-

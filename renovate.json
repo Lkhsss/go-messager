@@ -75,7 +75,7 @@
                 "minor"
             ],
             "matchCurrentVersion": "!/^0\\./",
-            "automerge": true
+            "automerge": false
         },
         {
             "description": "前端（pnpm）：0.x 依赖保持人工审核",

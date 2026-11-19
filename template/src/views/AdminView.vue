@@ -1,264 +1,305 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { createTag, deleteTag, fetchAdminTags, reviewTag, updateTag, type TagItem } from '@/api/tag'
-import { isApiError } from '@/api/http'
-import { tagBadgeStyle } from '@/utils/tagColor'
-import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
-import AdminMaintenancePanel from '@/components/AdminMaintenancePanel.vue'
-import AdminCleanupPanel from '@/components/AdminCleanupPanel.vue'
+import { computed, onMounted, ref } from "vue";
+import {
+  createTag,
+  deleteTag,
+  fetchAdminTags,
+  reviewTag,
+  updateTag,
+  type TagItem,
+} from "@/api/tag";
+import { isApiError } from "@/api/http";
+import { tagBadgeStyle } from "@/utils/tagColor";
+import AdminUsersPanel from "@/components/AdminUsersPanel.vue";
+import AdminMaintenancePanel from "@/components/AdminMaintenancePanel.vue";
+import AdminCleanupPanel from "@/components/AdminCleanupPanel.vue";
 
-const activeTab = ref<'tags' | 'users' | 'maintenance' | 'cleanup'>('tags')
+const activeTab = ref<"tags" | "users" | "maintenance" | "cleanup">("tags");
 
-const tags = ref<TagItem[]>([])
-const name = ref('')
-const loading = ref(false)
-const errorMsg = ref('')
-const successMsg = ref('')
+const tags = ref<TagItem[]>([]);
+const name = ref("");
+const loading = ref(false);
+const errorMsg = ref("");
+const successMsg = ref("");
 // 审核状态筛选与进行中的标签 ID。
-const tagFilter = ref<'all' | 'pending'>('all')
-const reviewingId = ref<number | null>(null)
+const tagFilter = ref<"all" | "pending">("all");
+const reviewingId = ref<number | null>(null);
 
 // 颜色可选：不勾选「自定义颜色」就用默认高级灰
-const useCustomColor = ref(false)
-const color = ref('#3b82f6')
-const hexColorPattern = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+const useCustomColor = ref(false);
+const color = ref("#3b82f6");
+const hexColorPattern = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 // 编辑标签
-const editDialog = ref<HTMLDialogElement | null>(null)
-const editing = ref<TagItem | null>(null)
-const editName = ref('')
-const editUseCustomColor = ref(false)
-const editColor = ref('#3b82f6')
-const editSaving = ref(false)
-const editError = ref('')
+const editDialog = ref<HTMLDialogElement | null>(null);
+const editing = ref<TagItem | null>(null);
+const editName = ref("");
+const editUseCustomColor = ref(false);
+const editColor = ref("#3b82f6");
+const editSaving = ref(false);
+const editError = ref("");
 
 // 删除标签
-const deleteDialog = ref<HTMLDialogElement | null>(null)
-const deletingTag = ref<TagItem | null>(null)
-const deleting = ref(false)
-const deleteError = ref('')
+const deleteDialog = ref<HTMLDialogElement | null>(null);
+const deletingTag = ref<TagItem | null>(null);
+const deleting = ref(false);
+const deleteError = ref("");
 
 function resetColor() {
-  useCustomColor.value = false
-  color.value = '#3b82f6'
+  useCustomColor.value = false;
+  color.value = "#3b82f6";
 }
 
 function sortTags(list: TagItem[]): TagItem[] {
   return [...list].sort((a, b) => {
-    if (a.reviewed !== b.reviewed) return a.reviewed ? 1 : -1
-    return a.name.localeCompare(b.name)
-  })
+    if (a.reviewed !== b.reviewed) return a.reviewed ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function isValidColor(raw: string): boolean {
-  return !raw || hexColorPattern.test(raw)
+  return !raw || hexColorPattern.test(raw);
 }
 
-const pendingCount = computed(() => tags.value.filter((tag) => !tag.reviewed).length)
+const pendingCount = computed(() => tags.value.filter((tag) => !tag.reviewed).length);
 const visibleTags = computed(() =>
-  tagFilter.value === 'pending' ? tags.value.filter((tag) => !tag.reviewed) : tags.value,
-)
+  tagFilter.value === "pending" ? tags.value.filter((tag) => !tag.reviewed) : tags.value,
+);
 
 // 审核 / 取消审核。
 async function toggleReview(tag: TagItem) {
-  if (reviewingId.value !== null) return
+  if (reviewingId.value !== null) return;
 
-  reviewingId.value = tag.ID
-  errorMsg.value = ''
-  successMsg.value = ''
+  reviewingId.value = tag.ID;
+  errorMsg.value = "";
+  successMsg.value = "";
   try {
-    const updated = await reviewTag(tag.ID, !tag.reviewed)
-    tags.value = sortTags(tags.value.map((item) => (item.ID === updated.ID ? updated : item)))
+    const updated = await reviewTag(tag.ID, !tag.reviewed);
+    tags.value = sortTags(tags.value.map((item) => (item.ID === updated.ID ? updated : item)));
     successMsg.value = updated.reviewed
       ? `标签「${updated.name}」已审核通过`
-      : `标签「${updated.name}」已取消审核`
+      : `标签「${updated.name}」已取消审核`;
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "操作失败，请稍后再试";
   } finally {
-    reviewingId.value = null
+    reviewingId.value = null;
   }
 }
 
 async function loadTags() {
   try {
-    tags.value = await fetchAdminTags()
+    tags.value = await fetchAdminTags();
   } catch {
     // 列表加载失败不阻塞创建
   }
 }
 
 async function onSubmit() {
-  if (loading.value) return
+  if (loading.value) return;
 
-  const trimmed = name.value.trim()
+  const trimmed = name.value.trim();
   if (!trimmed) {
-    errorMsg.value = '请输入标签名'
-    return
+    errorMsg.value = "请输入标签名";
+    return;
   }
   if ([...trimmed].length > 30) {
-    errorMsg.value = '标签名最多 30 个字符'
-    return
+    errorMsg.value = "标签名最多 30 个字符";
+    return;
   }
 
-  const trimmedColor = useCustomColor.value ? color.value.trim() : ''
+  const trimmedColor = useCustomColor.value ? color.value.trim() : "";
   if (!isValidColor(trimmedColor)) {
-    errorMsg.value = '颜色需为 #RGB 或 #RRGGBB 格式的十六进制'
-    return
+    errorMsg.value = "颜色需为 #RGB 或 #RRGGBB 格式的十六进制";
+    return;
   }
 
-  loading.value = true
-  errorMsg.value = ''
-  successMsg.value = ''
+  loading.value = true;
+  errorMsg.value = "";
+  successMsg.value = "";
   try {
-    const tag = await createTag(trimmed, trimmedColor)
-    tags.value = sortTags([...tags.value, tag])
-    name.value = ''
-    successMsg.value = `标签「${tag.name}」已创建`
+    const tag = await createTag(trimmed, trimmedColor);
+    tags.value = sortTags([...tags.value, tag]);
+    name.value = "";
+    successMsg.value = `标签「${tag.name}」已创建`;
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '创建失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "创建失败，请稍后再试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function openEdit(tag: TagItem) {
-  editing.value = tag
-  editName.value = tag.name
-  editUseCustomColor.value = Boolean(tag.color)
-  editColor.value = tag.color || '#3b82f6'
-  editError.value = ''
-  errorMsg.value = ''
-  successMsg.value = ''
+  editing.value = tag;
+  editName.value = tag.name;
+  editUseCustomColor.value = Boolean(tag.color);
+  editColor.value = tag.color || "#3b82f6";
+  editError.value = "";
+  errorMsg.value = "";
+  successMsg.value = "";
   if (!editDialog.value?.open) {
-    editDialog.value?.showModal()
+    editDialog.value?.showModal();
   }
 }
 
 function closeEdit() {
-  if (editSaving.value) return
-  editDialog.value?.close()
+  if (editSaving.value) return;
+  editDialog.value?.close();
 }
 
 function onEditClosed() {
-  editing.value = null
-  editError.value = ''
+  editing.value = null;
+  editError.value = "";
 }
 
 function onEditCancel(event: Event) {
   if (editSaving.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function saveEdit() {
-  if (editSaving.value) return
+  if (editSaving.value) return;
 
-  const target = editing.value
-  if (!target) return
+  const target = editing.value;
+  if (!target) return;
 
-  const trimmedName = editName.value.trim()
+  const trimmedName = editName.value.trim();
   if (!trimmedName) {
-    editError.value = '请输入标签名'
-    return
+    editError.value = "请输入标签名";
+    return;
   }
   if ([...trimmedName].length > 30) {
-    editError.value = '标签名最多 30 个字符'
-    return
+    editError.value = "标签名最多 30 个字符";
+    return;
   }
 
-  const trimmedColor = editUseCustomColor.value ? editColor.value.trim() : ''
+  const trimmedColor = editUseCustomColor.value ? editColor.value.trim() : "";
   if (!isValidColor(trimmedColor)) {
-    editError.value = '颜色需为 #RGB 或 #RRGGBB 格式的十六进制'
-    return
+    editError.value = "颜色需为 #RGB 或 #RRGGBB 格式的十六进制";
+    return;
   }
 
-  editSaving.value = true
-  editError.value = ''
-  errorMsg.value = ''
-  successMsg.value = ''
+  editSaving.value = true;
+  editError.value = "";
+  errorMsg.value = "";
+  successMsg.value = "";
   try {
-    const updated = await updateTag(target.ID, trimmedName, trimmedColor)
-    tags.value = sortTags(tags.value.map((tag) => (tag.ID === updated.ID ? updated : tag)))
-    successMsg.value = `标签「${updated.name}」已更新`
-    editSaving.value = false
-    editDialog.value?.close()
+    const updated = await updateTag(target.ID, trimmedName, trimmedColor);
+    tags.value = sortTags(tags.value.map((tag) => (tag.ID === updated.ID ? updated : tag)));
+    successMsg.value = `标签「${updated.name}」已更新`;
+    editSaving.value = false;
+    editDialog.value?.close();
   } catch (err) {
-    editError.value = isApiError(err) ? err.message : '更新失败，请稍后再试'
+    editError.value = isApiError(err) ? err.message : "更新失败，请稍后再试";
   } finally {
-    editSaving.value = false
+    editSaving.value = false;
   }
 }
 
 function openDelete(tag: TagItem) {
-  deletingTag.value = tag
-  deleteError.value = ''
-  errorMsg.value = ''
-  successMsg.value = ''
+  deletingTag.value = tag;
+  deleteError.value = "";
+  errorMsg.value = "";
+  successMsg.value = "";
   if (!deleteDialog.value?.open) {
-    deleteDialog.value?.showModal()
+    deleteDialog.value?.showModal();
   }
 }
 
 function closeDelete() {
-  if (deleting.value) return
-  deleteDialog.value?.close()
+  if (deleting.value) return;
+  deleteDialog.value?.close();
 }
 
 function onDeleteClosed() {
-  deletingTag.value = null
-  deleteError.value = ''
+  deletingTag.value = null;
+  deleteError.value = "";
 }
 
 function onDeleteCancel(event: Event) {
   if (deleting.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function confirmDelete() {
-  if (deleting.value) return
+  if (deleting.value) return;
 
-  const target = deletingTag.value
-  if (!target) return
+  const target = deletingTag.value;
+  if (!target) return;
 
-  deleting.value = true
-  deleteError.value = ''
-  errorMsg.value = ''
-  successMsg.value = ''
+  deleting.value = true;
+  deleteError.value = "";
+  errorMsg.value = "";
+  successMsg.value = "";
   try {
-    await deleteTag(target.ID)
-    tags.value = tags.value.filter((tag) => tag.ID !== target.ID)
-    successMsg.value = `标签「${target.name}」已删除`
-    deleting.value = false
-    deleteDialog.value?.close()
+    await deleteTag(target.ID);
+    tags.value = tags.value.filter((tag) => tag.ID !== target.ID);
+    successMsg.value = `标签「${target.name}」已删除`;
+    deleting.value = false;
+    deleteDialog.value?.close();
   } catch (err) {
-    deleteError.value = isApiError(err) ? err.message : '删除失败，请稍后再试'
+    deleteError.value = isApiError(err) ? err.message : "删除失败，请稍后再试";
   } finally {
-    deleting.value = false
+    deleting.value = false;
   }
 }
 
 onMounted(() => {
-  void loadTags()
-})
+  void loadTags();
+});
 </script>
 
 <template>
-  <main class="mx-auto w-full p-4 sm:p-6 lg:p-8"
-    :class="activeTab === 'users' || activeTab === 'cleanup' ? 'max-w-5xl' : 'max-w-3xl'">
+  <main
+    class="mx-auto w-full p-4 sm:p-6 lg:p-8"
+    :class="activeTab === 'users' || activeTab === 'cleanup' ? 'max-w-5xl' : 'max-w-3xl'"
+  >
     <div class="mb-4">
       <h1 class="text-2xl font-semibold lg:text-3xl">管理</h1>
     </div>
 
     <div role="tablist" class="tabs tabs-box mb-5">
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tags' }"
-        :aria-selected="activeTab === 'tags'" @click="activeTab = 'tags'">标签管理</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'users' }"
-        :aria-selected="activeTab === 'users'" @click="activeTab = 'users'">用户管理</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'cleanup' }"
-        :aria-selected="activeTab === 'cleanup'" @click="activeTab = 'cleanup'">清理</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'maintenance' }"
-        :aria-selected="activeTab === 'maintenance'" @click="activeTab = 'maintenance'">维护模式</button>
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ 'tab-active': activeTab === 'tags' }"
+        :aria-selected="activeTab === 'tags'"
+        @click="activeTab = 'tags'"
+      >
+        标签管理
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ 'tab-active': activeTab === 'users' }"
+        :aria-selected="activeTab === 'users'"
+        @click="activeTab = 'users'"
+      >
+        用户管理
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ 'tab-active': activeTab === 'cleanup' }"
+        :aria-selected="activeTab === 'cleanup'"
+        @click="activeTab = 'cleanup'"
+      >
+        清理
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ 'tab-active': activeTab === 'maintenance' }"
+        :aria-selected="activeTab === 'maintenance'"
+        @click="activeTab = 'maintenance'"
+      >
+        维护模式
+      </button>
     </div>
 
     <section v-show="activeTab === 'tags'" class="card bg-base-100 shadow-sm">
@@ -274,8 +315,15 @@ onMounted(() => {
           <div class="flex flex-col gap-2 sm:flex-row">
             <label class="floating-label flex-1">
               <span>标签名</span>
-              <input v-model="name" type="text" name="tag" placeholder="例如：Go" maxlength="30"
-                class="input input-bordered w-full" :disabled="loading" />
+              <input
+                v-model="name"
+                type="text"
+                name="tag"
+                placeholder="例如：Go"
+                maxlength="30"
+                class="input input-bordered w-full"
+                :disabled="loading"
+              />
             </label>
             <button type="submit" class="btn btn-primary sm:self-end" :disabled="loading">
               <span v-if="loading" class="loading loading-spinner loading-sm"></span>
@@ -291,17 +339,29 @@ onMounted(() => {
             </label>
 
             <template v-if="useCustomColor">
-              <input v-model="color" type="color" class="h-9 w-14 cursor-pointer rounded border border-base-300 bg-base-100 p-1"
-                aria-label="选择标签颜色" />
-              <input v-model="color" type="text" class="input input-bordered input-sm w-28" placeholder="#6b7280"
-                maxlength="7" aria-label="十六进制颜色" />
-              <button type="button" class="btn btn-ghost btn-xs" @click="resetColor">使用默认灰</button>
+              <input
+                v-model="color"
+                type="color"
+                class="h-9 w-14 cursor-pointer rounded border border-base-300 bg-base-100 p-1"
+                aria-label="选择标签颜色"
+              />
+              <input
+                v-model="color"
+                type="text"
+                class="input input-bordered input-sm w-28"
+                placeholder="#6b7280"
+                maxlength="7"
+                aria-label="十六进制颜色"
+              />
+              <button type="button" class="btn btn-ghost btn-xs" @click="resetColor">
+                使用默认灰
+              </button>
             </template>
 
             <span class="inline-flex items-center gap-1 text-xs text-base-content/60">
               预览：
               <span class="badge" :style="tagBadgeStyle({ color: useCustomColor ? color : '' })">
-                #{{ name.trim() || '标签' }}
+                #{{ name.trim() || "标签" }}
               </span>
             </span>
           </div>
@@ -318,35 +378,64 @@ onMounted(() => {
           <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-sm font-medium">
               已有标签（{{ tags.length }}）
-              <span v-if="pendingCount > 0" class="badge badge-warning badge-sm">待审核 {{ pendingCount }}</span>
+              <span v-if="pendingCount > 0" class="badge badge-warning badge-sm"
+                >待审核 {{ pendingCount }}</span
+              >
             </h3>
             <div class="join">
-              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': tagFilter === 'all' }"
-                @click="tagFilter = 'all'">全部</button>
-              <button type="button" class="btn btn-xs join-item" :class="{ 'btn-active': tagFilter === 'pending' }"
-                @click="tagFilter = 'pending'">待审核</button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                :class="{ 'btn-active': tagFilter === 'all' }"
+                @click="tagFilter = 'all'"
+              >
+                全部
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                :class="{ 'btn-active': tagFilter === 'pending' }"
+                @click="tagFilter = 'pending'"
+              >
+                待审核
+              </button>
             </div>
           </div>
           <div v-if="visibleTags.length === 0" class="text-sm text-base-content/60">
-            {{ tagFilter === 'pending' ? '没有待审核的标签' : '还没有标签' }}
+            {{ tagFilter === "pending" ? "没有待审核的标签" : "还没有标签" }}
           </div>
           <div v-else class="space-y-2">
-            <div v-for="tag in visibleTags" :key="tag.ID"
-              class="flex flex-wrap items-center gap-2 rounded-box border border-base-200 px-3 py-2">
+            <div
+              v-for="tag in visibleTags"
+              :key="tag.ID"
+              class="flex flex-wrap items-center gap-2 rounded-box border border-base-200 px-3 py-2"
+            >
               <span class="badge" :style="tagBadgeStyle(tag)">#{{ tag.name }}</span>
               <span class="text-xs text-base-content/50">{{ tag.usage_count }} 篇文章</span>
               <span v-if="!tag.reviewed" class="badge badge-warning badge-sm">待审核</span>
               <div class="ml-auto flex items-center gap-1">
-                <button type="button" class="btn btn-ghost btn-xs"
-                  :disabled="reviewingId !== null || deleting || editSaving" @click="toggleReview(tag)">
-                  {{ reviewingId === tag.ID ? '处理中…' : tag.reviewed ? '取消审核' : '审核通过' }}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  :disabled="reviewingId !== null || deleting || editSaving"
+                  @click="toggleReview(tag)"
+                >
+                  {{ reviewingId === tag.ID ? "处理中…" : tag.reviewed ? "取消审核" : "审核通过" }}
                 </button>
-                <button type="button" class="btn btn-ghost btn-xs" :disabled="deleting || editSaving"
-                  @click="openEdit(tag)">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  :disabled="deleting || editSaving"
+                  @click="openEdit(tag)"
+                >
                   编辑
                 </button>
-                <button type="button" class="btn btn-ghost btn-xs text-error" :disabled="deleting || editSaving"
-                  @click="openDelete(tag)">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  :disabled="deleting || editSaving"
+                  @click="openDelete(tag)"
+                >
                   删除
                 </button>
               </div>
@@ -370,27 +459,53 @@ onMounted(() => {
         <form class="mt-4 space-y-4" novalidate @submit.prevent="saveEdit">
           <label class="floating-label">
             <span>标签名</span>
-            <input v-model="editName" type="text" placeholder="例如：Go" maxlength="30" class="input input-bordered w-full"
-              :disabled="editSaving" />
+            <input
+              v-model="editName"
+              type="text"
+              placeholder="例如：Go"
+              maxlength="30"
+              class="input input-bordered w-full"
+              :disabled="editSaving"
+            />
           </label>
 
           <div class="flex flex-wrap items-center gap-3 text-sm">
             <label class="flex cursor-pointer items-center gap-2">
-              <input v-model="editUseCustomColor" type="checkbox" class="toggle toggle-sm" :disabled="editSaving" />
+              <input
+                v-model="editUseCustomColor"
+                type="checkbox"
+                class="toggle toggle-sm"
+                :disabled="editSaving"
+              />
               自定义颜色
             </label>
 
             <template v-if="editUseCustomColor">
-              <input v-model="editColor" type="color" class="h-9 w-14 cursor-pointer rounded border border-base-300 bg-base-100 p-1"
-                aria-label="选择标签颜色" :disabled="editSaving" />
-              <input v-model="editColor" type="text" class="input input-bordered input-sm w-28" placeholder="#6b7280"
-                maxlength="7" aria-label="十六进制颜色" :disabled="editSaving" />
+              <input
+                v-model="editColor"
+                type="color"
+                class="h-9 w-14 cursor-pointer rounded border border-base-300 bg-base-100 p-1"
+                aria-label="选择标签颜色"
+                :disabled="editSaving"
+              />
+              <input
+                v-model="editColor"
+                type="text"
+                class="input input-bordered input-sm w-28"
+                placeholder="#6b7280"
+                maxlength="7"
+                aria-label="十六进制颜色"
+                :disabled="editSaving"
+              />
             </template>
 
             <span class="inline-flex items-center gap-1 text-xs text-base-content/60">
               预览：
-              <span class="badge" :style="tagBadgeStyle({ color: editUseCustomColor ? editColor : '' })">
-                #{{ editName.trim() || '标签' }}
+              <span
+                class="badge"
+                :style="tagBadgeStyle({ color: editUseCustomColor ? editColor : '' })"
+              >
+                #{{ editName.trim() || "标签" }}
               </span>
             </span>
           </div>
@@ -400,7 +515,9 @@ onMounted(() => {
           </div>
 
           <div class="modal-action">
-            <button type="button" class="btn btn-ghost" :disabled="editSaving" @click="closeEdit">取消</button>
+            <button type="button" class="btn btn-ghost" :disabled="editSaving" @click="closeEdit">
+              取消
+            </button>
             <button type="submit" class="btn btn-primary" :disabled="editSaving">
               <span v-if="editSaving" class="loading loading-spinner loading-sm"></span>
               保存
@@ -408,7 +525,9 @@ onMounted(() => {
           </div>
         </form>
       </div>
-      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': editSaving }"><button>close</button></form>
+      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': editSaving }">
+        <button>close</button>
+      </form>
     </dialog>
 
     <!-- 删除标签确认弹窗 -->
@@ -425,7 +544,8 @@ onMounted(() => {
             吗？
           </p>
           <p v-if="deletingTag && deletingTag.usage_count > 0" class="text-warning">
-            该标签被 {{ deletingTag.usage_count }} 篇文章使用，删除后会从这些文章中移除，文章本身不会删除。
+            该标签被
+            {{ deletingTag.usage_count }} 篇文章使用，删除后会从这些文章中移除，文章本身不会删除。
           </p>
           <p v-else class="text-base-content/60">删除后不可恢复。</p>
 
@@ -435,15 +555,18 @@ onMounted(() => {
         </div>
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">取消</button>
+          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">
+            取消
+          </button>
           <button type="button" class="btn btn-error" :disabled="deleting" @click="confirmDelete">
             <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
             删除
           </button>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }"><button>close</button></form>
+      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }">
+        <button>close</button>
+      </form>
     </dialog>
   </main>
 </template>
-

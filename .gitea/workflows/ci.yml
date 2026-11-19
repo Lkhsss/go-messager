@@ -28,6 +28,10 @@ jobs:
           cache-dependency-path: template/pnpm-lock.yaml
           cache: false
           install: false
+      - name: 运行快速检查
+        run: |
+          pnpm run fmt:check
+          pnpm run lint:check
       - run: pnpm install --frozen-lockfile # 确保使用锁文件中的精确版本
       - run: pnpm type-check # vue-tsc --noEmit
       # 后端用 //go:embed template/dist 内嵌前端，需要真实产物；

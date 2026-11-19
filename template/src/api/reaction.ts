@@ -57,7 +57,9 @@ export function reactionCount(summary: ReactionSummary | undefined, type: Reacti
 
 // 切换反应，再次点击取消。
 export async function toggleReaction(postId: number, type: ReactionType): Promise<ReactionResult> {
-  const { data } = await http.post<ApiResponse<ReactionResult>>(`/post/${postId}/reaction`, { type });
+  const { data } = await http.post<ApiResponse<ReactionResult>>(`/post/${postId}/reaction`, {
+    type,
+  });
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "操作失败" };
   }

@@ -126,7 +126,8 @@ export interface DeleteUntrustedUsersResult {
 
 // 硬删除所有未标记可信的普通用户及其内容。
 export async function deleteUntrustedUsers(): Promise<DeleteUntrustedUsersResult> {
-  const { data } = await http.delete<ApiResponse<DeleteUntrustedUsersResult>>("/admin/users/untrusted");
+  const { data } =
+    await http.delete<ApiResponse<DeleteUntrustedUsersResult>>("/admin/users/untrusted");
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "清理未可信用户失败" };
   }

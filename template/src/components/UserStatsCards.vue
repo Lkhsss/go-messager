@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { MyStats } from '@/api/stats'
+import type { MyStats } from "@/api/stats";
 
-defineProps<{ stats: MyStats }>()
+defineProps<{ stats: MyStats }>();
 </script>
 
 <template>

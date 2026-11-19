@@ -1,161 +1,167 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { createComment, deletePost, fetchComments, type CommentItem, type PostItem } from '@/api/post'
-import { isApiError } from '@/api/http'
-import CommentNode from '@/components/CommentNode.vue'
-import { useRoute } from 'vue-router'
-import { useLoginPromptStore } from '@/stores/loginPrompt'
-import { useAuthStore } from '@/stores/auth'
-import { useToastStore } from '@/stores/toast'
+import { onMounted, ref } from "vue";
+import {
+  createComment,
+  deletePost,
+  fetchComments,
+  type CommentItem,
+  type PostItem,
+} from "@/api/post";
+import { isApiError } from "@/api/http";
+import CommentNode from "@/components/CommentNode.vue";
+import { useRoute } from "vue-router";
+import { useLoginPromptStore } from "@/stores/loginPrompt";
+import { useAuthStore } from "@/stores/auth";
+import { useToastStore } from "@/stores/toast";
 
-const route = useRoute()
-const auth = useAuthStore()
-const loginPrompt = useLoginPromptStore()
-const toast = useToastStore()
+const route = useRoute();
+const auth = useAuthStore();
+const loginPrompt = useLoginPromptStore();
+const toast = useToastStore();
 
-const props = defineProps<{ postId: number }>()
+const props = defineProps<{ postId: number }>();
 
-const comments = ref<CommentItem[]>([])
-const flatComments = ref<PostItem[]>([])
-const loading = ref(false)
-const errorMsg = ref('')
-const body = ref('')
-const submitting = ref(false)
+const comments = ref<CommentItem[]>([]);
+const flatComments = ref<PostItem[]>([]);
+const loading = ref(false);
+const errorMsg = ref("");
+const body = ref("");
+const submitting = ref(false);
 
 // 删除评论
-const deleteDialog = ref<HTMLDialogElement | null>(null)
-const deletingComment = ref<CommentItem | null>(null)
-const deleting = ref(false)
-const deleteError = ref('')
+const deleteDialog = ref<HTMLDialogElement | null>(null);
+const deletingComment = ref<CommentItem | null>(null);
+const deleting = ref(false);
+const deleteError = ref("");
 
 function buildTree(list: PostItem[]): CommentItem[] {
-  const map = new Map<number, CommentItem>()
+  const map = new Map<number, CommentItem>();
   for (const item of list) {
-    map.set(item.ID, { ...item, children: [] })
+    map.set(item.ID, { ...item, children: [] });
   }
 
-  const roots: CommentItem[] = []
+  const roots: CommentItem[] = [];
   for (const node of map.values()) {
-    const parent = node.parent_id ? map.get(node.parent_id) : undefined
+    const parent = node.parent_id ? map.get(node.parent_id) : undefined;
     if (parent) {
-      parent.children.push(node)
+      parent.children.push(node);
     } else {
-      roots.push(node)
+      roots.push(node);
     }
   }
 
-  return roots
+  return roots;
 }
 
 async function loadComments() {
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = "";
   try {
-    const list = await fetchComments(props.postId)
-    flatComments.value = list
-    comments.value = buildTree(list)
+    const list = await fetchComments(props.postId);
+    flatComments.value = list;
+    comments.value = buildTree(list);
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '获取评论失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "获取评论失败，请稍后再试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function submitComment() {
-  if (submitting.value) return
+  if (submitting.value) return;
 
   if (!auth.isLoggedIn) {
-    loginPrompt.show(route.fullPath)
-    return
+    loginPrompt.show(route.fullPath);
+    return;
   }
 
-  const content = body.value.trim()
+  const content = body.value.trim();
   if (!content) {
-    errorMsg.value = '请输入评论内容'
-    return
+    errorMsg.value = "请输入评论内容";
+    return;
   }
 
-  submitting.value = true
-  errorMsg.value = ''
+  submitting.value = true;
+  errorMsg.value = "";
   try {
-    const created = await createComment(props.postId, content)
+    const created = await createComment(props.postId, content);
     if (created.xp) {
-      auth.applyExperience(created.xp.exp, created.xp.level)
-      toast.notifyXp(created.xp)
+      auth.applyExperience(created.xp.exp, created.xp.level);
+      toast.notifyXp(created.xp);
     }
-    body.value = ''
-    await loadComments()
+    body.value = "";
+    await loadComments();
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '发表评论失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "发表评论失败，请稍后再试";
   } finally {
-    submitting.value = false
+    submitting.value = false;
   }
 }
 
 function descendantCount(comment: CommentItem): number {
-  let total = 0
+  let total = 0;
   for (const child of comment.children) {
-    total += 1 + descendantCount(child)
+    total += 1 + descendantCount(child);
   }
-  return total
+  return total;
 }
 
 function openDelete(comment: CommentItem) {
-  deletingComment.value = comment
-  deleteError.value = ''
+  deletingComment.value = comment;
+  deleteError.value = "";
   if (!deleteDialog.value?.open) {
-    deleteDialog.value?.showModal()
+    deleteDialog.value?.showModal();
   }
 }
 
 function closeDelete() {
-  if (deleting.value) return
-  deleteDialog.value?.close()
+  if (deleting.value) return;
+  deleteDialog.value?.close();
 }
 
 function onDeleteClosed() {
-  deletingComment.value = null
-  deleteError.value = ''
+  deletingComment.value = null;
+  deleteError.value = "";
 }
 
 function onDeleteCancel(event: Event) {
   if (deleting.value) {
-    event.preventDefault()
+    event.preventDefault();
   }
 }
 
 async function confirmDelete() {
-  if (deleting.value) return
+  if (deleting.value) return;
 
-  const target = deletingComment.value
-  if (!target) return
+  const target = deletingComment.value;
+  if (!target) return;
 
-  deleting.value = true
-  deleteError.value = ''
+  deleting.value = true;
+  deleteError.value = "";
   try {
-    await deletePost(target.ID)
-    deleting.value = false
-    deleteDialog.value?.close()
-    await loadComments()
+    await deletePost(target.ID);
+    deleting.value = false;
+    deleteDialog.value?.close();
+    await loadComments();
   } catch (err) {
-    deleteError.value = isApiError(err) ? err.message : '删除评论失败，请稍后再试'
+    deleteError.value = isApiError(err) ? err.message : "删除评论失败，请稍后再试";
   } finally {
-    deleting.value = false
+    deleting.value = false;
   }
 }
 
 // 未登录时点击评论输入框直接弹出登录提示。
 function onCommentClick(event: MouseEvent) {
-  if (auth.isLoggedIn) return
-  loginPrompt.show(route.fullPath)
+  if (auth.isLoggedIn) return;
+  loginPrompt.show(route.fullPath);
   if (event.target instanceof HTMLElement) {
-    event.target.blur()
+    event.target.blur();
   }
 }
 
 onMounted(() => {
-  void loadComments()
-})
+  void loadComments();
+});
 </script>
 
 <template>
@@ -167,11 +173,16 @@ onMounted(() => {
       </div>
 
       <form class="space-y-2" @submit.prevent="submitComment">
-        <textarea v-model="body" rows="4" class="textarea textarea-bordered w-full text-sm"
+        <textarea
+          v-model="body"
+          rows="4"
+          class="textarea textarea-bordered w-full text-sm"
           :placeholder="auth.isLoggedIn ? '写下你的评论，支持 Markdown…' : '登录后即可发表评论'"
-          :readonly="!auth.isLoggedIn" :disabled="submitting" @click="onCommentClick"></textarea>
+          :readonly="!auth.isLoggedIn"
+          :disabled="submitting"
+          @click="onCommentClick"
+        ></textarea>
         <div class="flex justify-end gap-2">
-
           <button type="submit" class="btn btn-primary btn-sm" :disabled="submitting">
             <span v-if="submitting" class="loading loading-spinner loading-sm"></span>
             发表评论
@@ -192,8 +203,14 @@ onMounted(() => {
       </div>
 
       <div v-else class="space-y-3" :class="{ 'opacity-60': loading }">
-        <CommentNode v-for="comment in comments" :key="comment.ID" :comment="comment" :post-id="postId"
-          @created="loadComments" @delete="openDelete" />
+        <CommentNode
+          v-for="comment in comments"
+          :key="comment.ID"
+          :comment="comment"
+          :post-id="postId"
+          @created="loadComments"
+          @delete="openDelete"
+        />
       </div>
     </div>
     <!-- 删除评论确认弹窗 -->
@@ -214,18 +231,18 @@ onMounted(() => {
         </div>
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">取消</button>
+          <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeDelete">
+            取消
+          </button>
           <button type="button" class="btn btn-error" :disabled="deleting" @click="confirmDelete">
             <span v-if="deleting" class="loading loading-spinner loading-sm"></span>
             删除
           </button>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }"><button>close</button></form>
+      <form method="dialog" class="modal-backdrop" :class="{ 'pointer-events-none': deleting }">
+        <button>close</button>
+      </form>
     </dialog>
   </section>
 </template>
-
-
-
-

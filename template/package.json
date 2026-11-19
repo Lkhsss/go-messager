@@ -8,7 +8,11 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint:check": "oxlint",
+    "lint": "oxlint --fix"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -24,11 +28,13 @@
   },
   "devDependencies": {
     "@tsconfig/node26": "^26.0.0",
-    "@types/node": "^24.13.4",
+    "@types/node": "^26.0.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
     "daisyui": "^5.7.50",
     "npm-run-all2": "^9.0.3",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
     "typescript": "~6.0.0",
     "vite": "^8.2.2",
     "vite-plugin-vue-devtools": "^8.2.1",

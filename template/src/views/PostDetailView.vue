@@ -1,75 +1,75 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import Post from '@/components/Post.vue'
-import CommentSection from '@/components/CommentSection.vue'
-import { fetchPost, type PostItem } from '@/api/post'
-import { toggleReaction, type ReactionType } from '@/api/reaction'
-import { isApiError } from '@/api/http'
-import { useLoginPromptStore } from '@/stores/loginPrompt'
-import { useAuthStore } from '@/stores/auth'
-import { useToastStore } from '@/stores/toast'
+import { onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import Post from "@/components/Post.vue";
+import CommentSection from "@/components/CommentSection.vue";
+import { fetchPost, type PostItem } from "@/api/post";
+import { toggleReaction, type ReactionType } from "@/api/reaction";
+import { isApiError } from "@/api/http";
+import { useLoginPromptStore } from "@/stores/loginPrompt";
+import { useAuthStore } from "@/stores/auth";
+import { useToastStore } from "@/stores/toast";
 
-const auth = useAuthStore()
-const loginPrompt = useLoginPromptStore()
-const toast = useToastStore()
-const route = useRoute()
-const router = useRouter()
+const auth = useAuthStore();
+const loginPrompt = useLoginPromptStore();
+const toast = useToastStore();
+const route = useRoute();
+const router = useRouter();
 
-const post = ref<PostItem | null>(null)
-const loading = ref(false)
-const errorMsg = ref('')
-const reacting = ref(false)
+const post = ref<PostItem | null>(null);
+const loading = ref(false);
+const errorMsg = ref("");
+const reacting = ref(false);
 function formatDate(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN");
 }
 
 async function loadPost() {
-  const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
-  const id = Number(raw)
+  const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id;
+  const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0) {
-    errorMsg.value = '文章 ID 无效'
-    return
+    errorMsg.value = "文章 ID 无效";
+    return;
   }
 
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = "";
   try {
-    post.value = await fetchPost(id)
+    post.value = await fetchPost(id);
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '加载文章失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "加载文章失败，请稍后再试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function onReact(type: ReactionType) {
-  if (!post.value || reacting.value) return
+  if (!post.value || reacting.value) return;
   if (!auth.isLoggedIn) {
-    loginPrompt.show(route.fullPath)
-    return
+    loginPrompt.show(route.fullPath);
+    return;
   }
 
-  reacting.value = true
+  reacting.value = true;
   try {
-    const result = await toggleReaction(post.value.ID, type)
-    post.value.reactions = result.reactions
-    post.value.my_reactions = result.my_reactions
+    const result = await toggleReaction(post.value.ID, type);
+    post.value.reactions = result.reactions;
+    post.value.my_reactions = result.my_reactions;
     if (result.xp) {
-      auth.applyExperience(result.xp.exp, result.xp.level)
-      toast.notifyXp(result.xp)
+      auth.applyExperience(result.xp.exp, result.xp.level);
+      toast.notifyXp(result.xp);
     }
   } catch (err) {
-    errorMsg.value = isApiError(err) ? err.message : '操作失败，请稍后再试'
+    errorMsg.value = isApiError(err) ? err.message : "操作失败，请稍后再试";
   } finally {
-    reacting.value = false
+    reacting.value = false;
   }
 }
 
 onMounted(() => {
-  void loadPost()
-})
+  void loadPost();
+});
 </script>
 
 <template>
@@ -92,10 +92,22 @@ onMounted(() => {
     </div>
 
     <template v-else-if="post">
-      <Post :post-id="post.ID" :user="post.user" :title="post.title" :subtitle="post.subtitle" :body="post.body"
-        :user-avatar-version="post.user_avatar_version" :user-level="post.user_level" :tags="post.tags"
-        :reactions="post.reactions" :my-reactions="post.my_reactions" :is-private="post.private"
-        :reacting="reacting" :detail="true" @react="onReact" />
+      <Post
+        :post-id="post.ID"
+        :user="post.user"
+        :title="post.title"
+        :subtitle="post.subtitle"
+        :body="post.body"
+        :user-avatar-version="post.user_avatar_version"
+        :user-level="post.user_level"
+        :tags="post.tags"
+        :reactions="post.reactions"
+        :my-reactions="post.my_reactions"
+        :is-private="post.private"
+        :reacting="reacting"
+        :detail="true"
+        @react="onReact"
+      />
 
       <CommentSection :post-id="post.ID" />
     </template>

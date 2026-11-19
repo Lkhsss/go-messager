@@ -30,7 +30,10 @@ export const useToastStore = defineStore("toast", () => {
   function push(item: Omit<ToastItem, "id">) {
     const id = nextId++;
     items.value = [...items.value.slice(-2), { id, ...item }];
-    timers.set(id, window.setTimeout(() => dismiss(id), AUTO_HIDE_MS));
+    timers.set(
+      id,
+      window.setTimeout(() => dismiss(id), AUTO_HIDE_MS),
+    );
   }
 
   // 经验增加提示，升级时额外高亮。

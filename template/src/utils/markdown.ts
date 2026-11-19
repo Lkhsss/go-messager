@@ -240,7 +240,10 @@ function renderMockupCode(content: string, rawLang: string): string {
 
   const badge = lang ? `<span class="code-lang">${md.utils.escapeHtml(lang)}</span>` : "";
   const rows = lines
-    .map((line, index) => `<pre data-prefix="${index + 1}"><code${langClass}>${line || " "}</code></pre>`)
+    .map(
+      (line, index) =>
+        `<pre data-prefix="${index + 1}"><code${langClass}>${line || " "}</code></pre>`,
+    )
     .join("");
 
   return `<div class="mockup-code my-3">${badge}${rows}</div>\n`;
@@ -262,10 +265,7 @@ md.renderer.rules.code_block = (tokens, idx) => {
   return renderMockupCode(token.content, "");
 };
 
-export function renderMarkdown(
-  source: string,
-  tags?: Pick<TagItem, "name" | "color">[],
-): string {
+export function renderMarkdown(source: string, tags?: Pick<TagItem, "name" | "color">[]): string {
   const env = tags
     ? { tagColors: Object.fromEntries(tags.map((tag) => [tag.name, tagColor(tag)])) }
     : {};
@@ -298,4 +298,3 @@ export function extractBodyTags(source: string): string[] {
 
   return names;
 }
-

@@ -14,7 +14,9 @@ export interface PostDraft {
 }
 
 // 草稿内容是否值得保留。
-export function hasPostDraftContent(draft: Pick<PostDraft, "title" | "subtitle" | "body" | "tags">): boolean {
+export function hasPostDraftContent(
+  draft: Pick<PostDraft, "title" | "subtitle" | "body" | "tags">,
+): boolean {
   return (
     draft.title.trim() !== "" ||
     draft.subtitle.trim() !== "" ||

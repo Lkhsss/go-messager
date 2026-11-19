@@ -147,4 +147,3 @@ export const useAuthStore = defineStore("auth", () => {
     ensureSession,
   };
 });
-

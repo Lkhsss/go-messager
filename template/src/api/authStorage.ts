@@ -67,7 +67,8 @@ export function readAuth(): StoredAuth | null {
     }
 
     const roleCandidate = storedUser?.role;
-    const avatarVersion = typeof storedUser?.avatar_version === "string" ? storedUser.avatar_version : undefined;
+    const avatarVersion =
+      typeof storedUser?.avatar_version === "string" ? storedUser.avatar_version : undefined;
     const reactionTotals = storedUser?.reaction_totals;
     const exp = typeof storedUser?.exp === "number" ? storedUser.exp : undefined;
     const level = typeof storedUser?.level === "number" ? storedUser.level : undefined;

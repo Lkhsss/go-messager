@@ -1,54 +1,54 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
-import type { TagItem } from '@/api/tag'
-import type { ReactionSummary, ReactionType } from '@/api/reaction'
-import { tagBadgeStyle } from '@/utils/tagColor'
-import { renderEmojiText } from '@/utils/emoji'
-import UserAvatar from '@/components/UserAvatar.vue'
-import ReactionBar from '@/components/ReactionBar.vue'
+import { computed, defineAsyncComponent } from "vue";
+import type { TagItem } from "@/api/tag";
+import type { ReactionSummary, ReactionType } from "@/api/reaction";
+import { tagBadgeStyle } from "@/utils/tagColor";
+import { renderEmojiText } from "@/utils/emoji";
+import UserAvatar from "@/components/UserAvatar.vue";
+import ReactionBar from "@/components/ReactionBar.vue";
 
 // Markdown 和代码高亮异步加载。
-const MarkdownContent = defineAsyncComponent(() => import('@/components/MarkdownContent.vue'))
+const MarkdownContent = defineAsyncComponent(() => import("@/components/MarkdownContent.vue"));
 
 const props = defineProps<{
-  postId: number
-  user: string
-  title: string
-  subtitle: string
-  body?: string
-  excerpt?: string
-  userAvatarVersion?: string
-  userLevel?: number
-  tags?: TagItem[]
-  reactions?: ReactionSummary
-  myReactions?: ReactionType[]
-  reacting?: boolean
-  isPrivate?: boolean
-  canManage?: boolean
-  managing?: boolean
-  detail?: boolean
-}>()
+  postId: number;
+  user: string;
+  title: string;
+  subtitle: string;
+  body?: string;
+  excerpt?: string;
+  userAvatarVersion?: string;
+  userLevel?: number;
+  tags?: TagItem[];
+  reactions?: ReactionSummary;
+  myReactions?: ReactionType[];
+  reacting?: boolean;
+  isPrivate?: boolean;
+  canManage?: boolean;
+  managing?: boolean;
+  detail?: boolean;
+}>();
 
 defineEmits<{
-  (e: 'react', type: ReactionType): void
-  (e: 'toggle-private'): void
-  (e: 'delete'): void
-}>()
+  (e: "react", type: ReactionType): void;
+  (e: "toggle-private"): void;
+  (e: "delete"): void;
+}>();
 
-const renderedTitle = computed(() => renderEmojiText(props.title))
-const renderedSubtitle = computed(() => renderEmojiText(props.subtitle))
-const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ''))
+const renderedTitle = computed(() => renderEmojiText(props.title));
+const renderedSubtitle = computed(() => renderEmojiText(props.subtitle));
+const renderedExcerpt = computed(() => renderEmojiText(props.excerpt ?? ""));
 
 // 列表卡片最多展示 8 个标签，详情页展示全部。
-const MAX_CARD_TAGS = 8
+const MAX_CARD_TAGS = 8;
 const visibleTags = computed(() => {
-  const list = props.tags ?? []
-  return props.detail ? list : list.slice(0, MAX_CARD_TAGS)
-})
+  const list = props.tags ?? [];
+  return props.detail ? list : list.slice(0, MAX_CARD_TAGS);
+});
 const hiddenTags = computed(() => {
-  const list = props.tags ?? []
-  return props.detail ? [] : list.slice(MAX_CARD_TAGS)
-})
+  const list = props.tags ?? [];
+  return props.detail ? [] : list.slice(MAX_CARD_TAGS);
+});
 </script>
 
 <template>
@@ -58,16 +58,29 @@ const hiddenTags = computed(() => {
         <UserAvatar :name="user" :version="userAvatarVersion" :size="40" />
         <div class="flex min-w-0 items-center gap-2">
           <p class="truncate font-medium">{{ user }}</p>
-          <span v-if="userLevel"
+          <span
+            v-if="userLevel"
             class="badge badge-sm shrink-0 rounded-full border-primary/30 bg-primary/10 font-mono text-primary"
-            :title="`等级 ${userLevel}`">Lv.{{ userLevel }}</span>
+            :title="`等级 ${userLevel}`"
+            >Lv.{{ userLevel }}</span
+          >
         </div>
         <span v-if="isPrivate" class="badge badge-warning badge-sm">Private</span>
         <div v-if="canManage" class="ml-auto flex items-center gap-1">
-          <button type="button" class="btn btn-ghost btn-xs" :disabled="managing" @click="$emit('toggle-private')">
-            {{ isPrivate ? '取消隐藏' : '隐藏' }}
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            :disabled="managing"
+            @click="$emit('toggle-private')"
+          >
+            {{ isPrivate ? "取消隐藏" : "隐藏" }}
           </button>
-          <button type="button" class="btn btn-ghost btn-xs text-error" :disabled="managing" @click="$emit('delete')">
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs text-error"
+            :disabled="managing"
+            @click="$emit('delete')"
+          >
             删除
           </button>
         </div>
@@ -75,37 +88,77 @@ const hiddenTags = computed(() => {
 
       <div class="space-y-1">
         <h2 class="card-title min-w-0 text-lg">
-          <router-link v-if="!detail" :to="`/post/${postId}`"
-            class="min-w-0 break-words hover:underline">{{ renderedTitle }}</router-link>
+          <router-link
+            v-if="!detail"
+            :to="`/post/${postId}`"
+            class="min-w-0 break-words hover:underline"
+            >{{ renderedTitle }}</router-link
+          >
           <span v-else class="min-w-0 break-words">{{ renderedTitle }}</span>
         </h2>
-        <p v-if="subtitle" class="min-w-0 break-words text-sm text-base-content/60">{{ renderedSubtitle }}</p>
+        <p v-if="subtitle" class="min-w-0 break-words text-sm text-base-content/60">
+          {{ renderedSubtitle }}
+        </p>
       </div>
 
-      <MarkdownContent v-if="detail" :source="body ?? ''" :tags="tags" class="text-sm text-base-content/80" />
-      <p v-else-if="excerpt" class="min-w-0 break-words whitespace-pre-line text-sm leading-6 text-base-content/70">{{ renderedExcerpt }}</p>
+      <MarkdownContent
+        v-if="detail"
+        :source="body ?? ''"
+        :tags="tags"
+        class="text-sm text-base-content/80"
+      />
+      <p
+        v-else-if="excerpt"
+        class="min-w-0 break-words whitespace-pre-line text-sm leading-6 text-base-content/70"
+      >
+        {{ renderedExcerpt }}
+      </p>
 
       <div v-if="!detail" class="flex justify-end">
         <router-link :to="`/post/${postId}`" class="btn btn-ghost btn-sm px-2 text-primary">
           查看详情
-          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-            viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          <svg
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            />
           </svg>
         </router-link>
       </div>
 
       <div v-if="visibleTags.length" class="flex flex-wrap gap-1">
-        <span v-for="tag in visibleTags" :key="tag.ID" class="badge badge-sm" :style="tagBadgeStyle(tag)"
-          :title="`被 ${tag.usage_count} 篇文章使用`">
+        <span
+          v-for="tag in visibleTags"
+          :key="tag.ID"
+          class="badge badge-sm"
+          :style="tagBadgeStyle(tag)"
+          :title="`被 ${tag.usage_count} 篇文章使用`"
+        >
           #{{ tag.name }}
         </span>
-        <span v-if="hiddenTags.length" class="badge badge-sm badge-ghost"
-          :title="hiddenTags.map((tag) => `#${tag.name}`).join(' ')">+{{ hiddenTags.length }}</span>
+        <span
+          v-if="hiddenTags.length"
+          class="badge badge-sm badge-ghost"
+          :title="hiddenTags.map((tag) => `#${tag.name}`).join(' ')"
+          >+{{ hiddenTags.length }}</span
+        >
       </div>
 
-      <ReactionBar :reactions="reactions" :my-reactions="myReactions" :busy="reacting"
-        @react="$emit('react', $event)" />
+      <ReactionBar
+        :reactions="reactions"
+        :my-reactions="myReactions"
+        :busy="reacting"
+        @react="$emit('react', $event)"
+      />
     </div>
   </article>
 </template>

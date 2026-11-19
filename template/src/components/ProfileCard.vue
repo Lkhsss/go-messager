@@ -1,42 +1,44 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Role } from '@/api/authStorage'
-import type { ReactionSummary } from '@/api/reaction'
-import { PRIMARY_REACTIONS, reactionCount } from '@/api/reaction'
-import UserAvatar from '@/components/UserAvatar.vue'
+import { computed } from "vue";
+import type { Role } from "@/api/authStorage";
+import type { ReactionSummary } from "@/api/reaction";
+import { PRIMARY_REACTIONS, reactionCount } from "@/api/reaction";
+import UserAvatar from "@/components/UserAvatar.vue";
 
 const props = withDefaults(
   defineProps<{
-    name: string
-    role?: Role
-    level?: number
-    avatarVersion?: string
-    previewSrc?: string
-    reactionTotals?: ReactionSummary
+    name: string;
+    role?: Role;
+    level?: number;
+    avatarVersion?: string;
+    previewSrc?: string;
+    reactionTotals?: ReactionSummary;
   }>(),
   {
-    role: 'user',
+    role: "user",
     level: 0,
-    avatarVersion: '',
-    previewSrc: '',
+    avatarVersion: "",
+    previewSrc: "",
   },
-)
+);
 
 const ROLE_LABELS: Record<Role, string> = {
-  admin: '管理员',
-  user: '成员',
-  none: '已停用',
-}
+  admin: "管理员",
+  user: "成员",
+  none: "已停用",
+};
 
-const roleLabel = computed(() => ROLE_LABELS[props.role])
-const isAdmin = computed(() => props.role === 'admin')
-const cardLabel = computed(() => `${props.name} 的个人名片，角色：${roleLabel.value}`)
+const roleLabel = computed(() => ROLE_LABELS[props.role]);
+const isAdmin = computed(() => props.role === "admin");
+const cardLabel = computed(() => `${props.name} 的个人名片，角色：${roleLabel.value}`);
 </script>
 
 <template>
   <div class="hover-3d w-full max-w-md" role="group" :aria-label="cardLabel">
     <!-- 8 个空 div 是 hover-3d 感应层。 -->
-    <div class="profile-card relative flex aspect-[1.58] min-h-52 w-full flex-col overflow-hidden rounded-[1.75rem] text-slate-50">
+    <div
+      class="profile-card relative flex aspect-[1.58] min-h-52 w-full flex-col overflow-hidden rounded-[1.75rem] text-slate-50"
+    >
       <div class="profile-glow" aria-hidden="true"></div>
       <div class="profile-grid" aria-hidden="true"></div>
       <div class="profile-grain" aria-hidden="true"></div>
@@ -46,28 +48,52 @@ const cardLabel = computed(() => `${props.name} 的个人名片，角色：${rol
           <div class="flex items-center gap-3">
             <!-- 支付波纹 -->
             <svg class="h-6 w-6 text-white/50" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M7.5 8.5a7 7 0 0 1 0 7M11 6a11 11 0 0 1 0 12M14.5 3.5a15 15 0 0 1 0 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              <path
+                d="M7.5 8.5a7 7 0 0 1 0 7M11 6a11 11 0 0 1 0 12M14.5 3.5a15 15 0 0 1 0 17"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
             </svg>
           </div>
 
           <div class="text-right">
             <p class="profile-wordmark">GO MESSAGER</p>
-            <p class="mt-0.5 text-[0.55rem] uppercase tracking-[0.3em] text-white/35">Member Card</p>
+            <p class="mt-0.5 text-[0.55rem] uppercase tracking-[0.3em] text-white/35">
+              Member Card
+            </p>
           </div>
         </header>
 
         <div class="flex min-w-0 items-center gap-4">
-          <UserAvatar :name="name" :version="avatarVersion" :src="previewSrc" :size="56"
-            class="ring-2 ring-white/25 ring-offset-2 ring-offset-[#0b1224]" />
+          <UserAvatar
+            :name="name"
+            :version="avatarVersion"
+            :src="previewSrc"
+            :size="56"
+            class="ring-2 ring-white/25 ring-offset-2 ring-offset-[#0b1224]"
+          />
           <div class="min-w-0">
             <p class="text-[0.55rem] uppercase tracking-[0.28em] text-white/40">Card Holder</p>
             <p class="profile-name truncate text-xl font-semibold sm:text-2xl">{{ name }}</p>
-            <span v-if="level"
+            <span
+              v-if="level"
               class="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200/40 bg-sky-200/15 px-2 py-0.5 font-mono text-[0.65rem] text-sky-100"
-              :title="`等级 ${level}`">Lv.{{ level }}</span>
-            <span class="mt-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem]"
-              :class="isAdmin ? 'border-amber-200/40 bg-amber-200/15 text-amber-100' : 'border-white/15 bg-white/10 text-white/75'">
-              <span class="h-1 w-1 rounded-full" :class="isAdmin ? 'bg-amber-200' : 'bg-white/50'"></span>
+              :title="`等级 ${level}`"
+              >Lv.{{ level }}</span
+            >
+            <span
+              class="mt-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem]"
+              :class="
+                isAdmin
+                  ? 'border-amber-200/40 bg-amber-200/15 text-amber-100'
+                  : 'border-white/15 bg-white/10 text-white/75'
+              "
+            >
+              <span
+                class="h-1 w-1 rounded-full"
+                :class="isAdmin ? 'bg-amber-200' : 'bg-white/50'"
+              ></span>
               {{ roleLabel }}
             </span>
           </div>
@@ -77,12 +103,16 @@ const cardLabel = computed(() => `${props.name} 的个人名片，角色：${rol
           <div class="flex items-end gap-4 sm:gap-5">
             <div v-for="option in PRIMARY_REACTIONS" :key="option.type" class="text-center">
               <p class="text-sm leading-none">{{ option.emoji }}</p>
-              <p class="profile-stat font-mono text-lg leading-tight">{{ reactionCount(reactionTotals, option.type) }}</p>
+              <p class="profile-stat font-mono text-lg leading-tight">
+                {{ reactionCount(reactionTotals, option.type) }}
+              </p>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
-            <span class="hidden text-[0.55rem] uppercase tracking-[0.3em] text-white/30 sm:inline">Member</span>
+            <span class="hidden text-[0.55rem] uppercase tracking-[0.3em] text-white/30 sm:inline"
+              >Member</span
+            >
             <span class="profile-holo" aria-hidden="true"></span>
           </div>
         </footer>

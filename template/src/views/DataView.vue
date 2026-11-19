@@ -1,80 +1,91 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { fetchAdminStats, fetchMyStats, type AdminStats, type MyStats, type StatsUnit } from '@/api/stats'
-import { isApiError } from '@/api/http'
-import LineChart from '@/components/charts/LineChart.vue'
-import PieChart from '@/components/charts/PieChart.vue'
-import ContributionHeatmap from '@/components/charts/ContributionHeatmap.vue'
-import UserStatsCards from '@/components/UserStatsCards.vue'
+import { onMounted, ref, watch } from "vue";
+import { useAuthStore } from "@/stores/auth";
+import {
+  fetchAdminStats,
+  fetchMyStats,
+  type AdminStats,
+  type MyStats,
+  type StatsUnit,
+} from "@/api/stats";
+import { isApiError } from "@/api/http";
+import LineChart from "@/components/charts/LineChart.vue";
+import PieChart from "@/components/charts/PieChart.vue";
+import ContributionHeatmap from "@/components/charts/ContributionHeatmap.vue";
+import UserStatsCards from "@/components/UserStatsCards.vue";
 
-const auth = useAuthStore()
+const auth = useAuthStore();
 
-const myStats = ref<MyStats | null>(null)
-const adminStats = ref<AdminStats | null>(null)
-const unit = ref<StatsUnit>('day')
-const loadingMy = ref(false)
-const loadingAdmin = ref(false)
-const errorMy = ref('')
-const errorAdmin = ref('')
+const myStats = ref<MyStats | null>(null);
+const adminStats = ref<AdminStats | null>(null);
+const unit = ref<StatsUnit>("day");
+const loadingMy = ref(false);
+const loadingAdmin = ref(false);
+const errorMy = ref("");
+const errorAdmin = ref("");
 
 const units: { value: StatsUnit; label: string }[] = [
-  { value: 'hour', label: '时' },
-  { value: 'day', label: '天' },
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-]
+  { value: "hour", label: "时" },
+  { value: "day", label: "天" },
+  { value: "week", label: "周" },
+  { value: "month", label: "月" },
+];
 
 async function loadMyStats() {
-  loadingMy.value = true
-  errorMy.value = ''
+  loadingMy.value = true;
+  errorMy.value = "";
   try {
-    myStats.value = await fetchMyStats()
+    myStats.value = await fetchMyStats();
   } catch (err) {
-    errorMy.value = isApiError(err) ? err.message : '获取个人统计失败，请稍后再试'
+    errorMy.value = isApiError(err) ? err.message : "获取个人统计失败，请稍后再试";
   } finally {
-    loadingMy.value = false
+    loadingMy.value = false;
   }
 }
 
 async function loadAdminStats() {
-  if (!auth.isAdmin) return
+  if (!auth.isAdmin) return;
 
-  loadingAdmin.value = true
-  errorAdmin.value = ''
+  loadingAdmin.value = true;
+  errorAdmin.value = "";
   try {
-    adminStats.value = await fetchAdminStats(unit.value)
+    adminStats.value = await fetchAdminStats(unit.value);
   } catch (err) {
-    errorAdmin.value = isApiError(err) ? err.message : '获取全站统计失败，请稍后再试'
+    errorAdmin.value = isApiError(err) ? err.message : "获取全站统计失败，请稍后再试";
   } finally {
-    loadingAdmin.value = false
+    loadingAdmin.value = false;
   }
 }
 
 onMounted(() => {
-  void loadMyStats()
+  void loadMyStats();
   if (auth.isAdmin) {
-    void loadAdminStats()
+    void loadAdminStats();
   }
-})
+});
 
 watch(unit, () => {
-  void loadAdminStats()
-})
+  void loadAdminStats();
+});
 </script>
 
 <template>
   <main class="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
     <header class="mb-6">
-
       <h1 class="mt-1 text-2xl font-semibold lg:text-3xl">数据</h1>
-
     </header>
 
     <section class="space-y-4">
       <div class="flex items-end justify-between gap-3">
         <h2 class="text-lg font-semibold">我的统计</h2>
-        <button type="button" class="btn btn-ghost btn-xs" :disabled="loadingMy" @click="loadMyStats">刷新</button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          :disabled="loadingMy"
+          @click="loadMyStats"
+        >
+          刷新
+        </button>
       </div>
 
       <div v-if="loadingMy && !myStats" class="flex justify-center py-10">
@@ -95,8 +106,15 @@ watch(unit, () => {
             <p class="mt-1 text-xs text-base-content/45">时间按服务器本地时区统计</p>
           </div>
           <div class="join">
-            <button v-for="item in units" :key="item.value" type="button" class="btn btn-sm join-item"
-              :class="{ 'btn-active': unit === item.value }" :disabled="loadingAdmin" @click="unit = item.value">
+            <button
+              v-for="item in units"
+              :key="item.value"
+              type="button"
+              class="btn btn-sm join-item"
+              :class="{ 'btn-active': unit === item.value }"
+              :disabled="loadingAdmin"
+              @click="unit = item.value"
+            >
               {{ item.label }}
             </button>
           </div>
@@ -129,8 +147,12 @@ watch(unit, () => {
             </div>
             <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
               <p class="text-xs text-base-content/50">注册人数</p>
-              <p class="mt-1 font-mono text-2xl font-semibold">{{ adminStats.registration_total }}</p>
-              <p class="mt-1 text-[0.65rem] text-base-content/45">近 30 天 +{{ adminStats.registration_recent }}</p>
+              <p class="mt-1 font-mono text-2xl font-semibold">
+                {{ adminStats.registration_total }}
+              </p>
+              <p class="mt-1 text-[0.65rem] text-base-content/45">
+                近 30 天 +{{ adminStats.registration_recent }}
+              </p>
             </div>
             <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
               <p class="text-xs text-base-content/50">标签数</p>
@@ -143,7 +165,8 @@ watch(unit, () => {
             <div class="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm">
               <p class="text-xs text-base-content/50">赞 / 踩 / 疑问</p>
               <p class="mt-1 font-mono text-lg font-semibold">
-                {{ adminStats.reactions.like }} / {{ adminStats.reactions.dislike }} / {{ adminStats.reactions.question }}
+                {{ adminStats.reactions.like }} / {{ adminStats.reactions.dislike }} /
+                {{ adminStats.reactions.question }}
               </p>
             </div>
           </div>
@@ -177,7 +200,3 @@ watch(unit, () => {
     </template>
   </main>
 </template>
-
-
-
-

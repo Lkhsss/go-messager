@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { redirectToLogin } from '@/utils/authRedirect'
-import { useLoginPromptStore } from '@/stores/loginPrompt'
+import { useRouter } from "vue-router";
+import { redirectToLogin } from "@/utils/authRedirect";
+import { useLoginPromptStore } from "@/stores/loginPrompt";
 
-const router = useRouter()
-const prompt = useLoginPromptStore()
+const router = useRouter();
+const prompt = useLoginPromptStore();
 
 function goLogin() {
-  const target = prompt.redirect.startsWith('/') && !prompt.redirect.startsWith('//')
-    ? prompt.redirect
-    : '/'
-  prompt.hide()
-  redirectToLogin(router, target)
+  const target =
+    prompt.redirect.startsWith("/") && !prompt.redirect.startsWith("//") ? prompt.redirect : "/";
+  prompt.hide();
+  redirectToLogin(router, target);
 }
 </script>
 

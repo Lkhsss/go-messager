@@ -17,7 +17,9 @@ export interface LeaderboardData {
 }
 
 export async function fetchLeaderboard(period: LeaderboardPeriod): Promise<LeaderboardData> {
-  const { data } = await http.get<ApiResponse<LeaderboardData>>("/leaderboard", { params: { period } });
+  const { data } = await http.get<ApiResponse<LeaderboardData>>("/leaderboard", {
+    params: { period },
+  });
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "获取排行榜失败" };
   }

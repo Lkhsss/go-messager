@@ -109,9 +109,11 @@ export async function createPost(input: CreatePostInput): Promise<PostItem> {
   return data.data;
 }
 
-
 // 我的文章。
-export async function fetchMyPosts({ page = 1, perPage = 10 }: Pick<PostQuery, "page" | "perPage"> = {}): Promise<PostListResult> {
+export async function fetchMyPosts({
+  page = 1,
+  perPage = 10,
+}: Pick<PostQuery, "page" | "perPage"> = {}): Promise<PostListResult> {
   const { data } = await http.get<ApiResponse<PostItem[]>>("/me/posts", {
     params: { page, per_page: perPage },
   });
@@ -160,13 +162,14 @@ export async function deletePost(id: number): Promise<void> {
 
 // 隐藏/取消隐藏文章。
 export async function setPostPrivate(id: number, isPrivate: boolean): Promise<PostItem> {
-  const { data } = await http.patch<ApiResponse<PostItem>>(`/post/${id}/private`, { private: isPrivate });
+  const { data } = await http.patch<ApiResponse<PostItem>>(`/post/${id}/private`, {
+    private: isPrivate,
+  });
   if (!data.success || !data.data) {
     throw data.error ?? { code: "UNKNOWN_ERROR", message: "更新文章可见性失败" };
   }
   return data.data;
 }
-
 
 // 评论列表，前端按 parent_id 组树。
 export async function fetchComments(postId: number): Promise<PostItem[]> {
@@ -178,7 +181,11 @@ export async function fetchComments(postId: number): Promise<PostItem[]> {
 }
 
 // 发表评论或回复。
-export async function createComment(postId: number, body: string, parentId?: number): Promise<PostItem> {
+export async function createComment(
+  postId: number,
+  body: string,
+  parentId?: number,
+): Promise<PostItem> {
   const payload: { body: string; parent_id?: number } = { body };
   if (parentId) {
     payload.parent_id = parentId;
@@ -190,5 +197,3 @@ export async function createComment(postId: number, body: string, parentId?: num
   }
   return data.data;
 }
-
-

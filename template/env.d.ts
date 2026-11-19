@@ -3,11 +3,14 @@
 declare module "markdown-it-emoji" {
   import type MarkdownIt from "markdown-it";
 
-  type EmojiPlugin = (md: MarkdownIt, options?: {
-    defs?: Record<string, string>;
-    shortcuts?: Record<string, string>;
-    enabled?: string[];
-  }) => void;
+  type EmojiPlugin = (
+    md: MarkdownIt,
+    options?: {
+      defs?: Record<string, string>;
+      shortcuts?: Record<string, string>;
+      enabled?: string[];
+    },
+  ) => void;
 
   export const full: EmojiPlugin;
   export const light: EmojiPlugin;
