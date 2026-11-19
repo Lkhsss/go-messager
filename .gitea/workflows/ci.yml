@@ -28,15 +28,15 @@ jobs:
           cache-dependency-path: template/pnpm-lock.yaml
           cache: false
           install: false
+
+      - run: pnpm install --frozen-lockfile # 确保使用锁文件中的精确版本
+      
       - name: 运行快速检查
         run: |
           pnpm run fmt:check
           pnpm run lint:check
-      - run: pnpm install --frozen-lockfile # 确保使用锁文件中的精确版本
-      - run: pnpm type-check # vue-tsc --noEmit
-      # 后端用 //go:embed template/dist 内嵌前端，需要真实产物；
-      # type-check 已在上一行单独执行，这里只跑 vite build，不重复类型检查。
-      - run: pnpm run build-only
+
+      - run: pnpm build
       # 产物体积是前端最直接的性能指标，生成清单留给 report 汇总
       - name: 统计构建产物体积
         run: du -ah dist | sort -k2 > dist-size.txt
